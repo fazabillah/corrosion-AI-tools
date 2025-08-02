@@ -1204,144 +1204,178 @@ def analysis_page():
             st.error("❌ System initialization failed. Please check configuration.")
             st.stop()
     
-    # Input parameters in sidebar
-    with st.sidebar:
-        st.header("Equipment Parameters")
+    # Check if we should show results or input form
+    show_results = st.session_state.get("analysis_result") is not None
+    
+    if not show_results:
+        # Input form on main page
+        st.markdown("## 📋 Equipment Parameters")
+        st.markdown("Configure your equipment details for comprehensive MCI analysis")
         
-        # Equipment context inputs
-        equipment_type = st.selectbox(
-            "Equipment Type:", 
-            ["Not Specified"] + EQUIPMENT_TYPES,
-            help="Select equipment for specific guidance"
-        )
-        
-        material = st.selectbox(
-            "Material:", 
-            ["Not Specified"] + MATERIALS,
-            help="Select material for specific recommendations"
-        )  
-        
-        environment = st.selectbox(
-            "Service Environment:", 
-            ["Not Specified"] + ENVIRONMENTS,
-            help="Select environment for specific analysis"
-        )
-        
-        damage_mechanism = st.selectbox(
-            "Damage Type:", 
-            ["Not Specified"] + DAMAGE_MECHANISMS,
-            help="Select damage type for specific information"
-        )
-        
-        # Operating conditions
-        st.subheader("Operating Conditions")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            temperature = st.number_input(
-                "Temperature (°C)", 
-                value=None, 
-                min_value=-50, 
-                max_value=1000, 
-                placeholder="Optional"
-            )
-        with col2:
-            pressure = st.number_input(
-                "Pressure (bar)", 
-                value=None, 
-                min_value=0, 
-                max_value=500, 
-                placeholder="Optional"
-            )
-        
-        # Analysis type
-        st.subheader("Analysis Focus")
-        analysis_focus = st.selectbox(
-            "Focus Area:",
-            [
-                "Comprehensive Analysis",
-                "Damage Mechanisms Only",
-                "Mitigation Strategies Only", 
-                "Operating Limits Only"
-            ]
-        )
-        
-        st.markdown("---")
-        
-        # Quick analysis buttons
-        st.subheader("Quick Analysis")
-        
-        if st.button("🔍 Run Analysis", type="primary", use_container_width=True):
-            # Create equipment context
-            equipment_context = {
-                'equipment_type': equipment_type,
-                'material': material,
-                'environment': environment,
-                'damage_mechanism': damage_mechanism,
-                'temperature': f"{temperature}°C" if temperature is not None else "Not Specified",
-                'pressure': f"{pressure} bar" if pressure is not None else "Not Specified"
-            }
+        # Equipment Information Section
+        with st.expander("🏭 **Equipment Information**", expanded=True):
+            col1, col2 = st.columns(2)
             
-            # Create analysis query based on context
-            context_parts = []
-            if damage_mechanism != "Not Specified":
-                context_parts.append(damage_mechanism)
+            with col1:
+                equipment_type = st.selectbox(
+                    "Equipment Type:", 
+                    ["Not Specified"] + EQUIPMENT_TYPES,
+                    help="Select equipment for specific guidance"
+                )
+                
+                material = st.selectbox(
+                    "Material:", 
+                    ["Not Specified"] + MATERIALS,
+                    help="Select material for specific recommendations"
+                )
+            
+            with col2:
+                environment = st.selectbox(
+                    "Service Environment:", 
+                    ["Not Specified"] + ENVIRONMENTS,
+                    help="Select environment for specific analysis"
+                )
+                
+                damage_mechanism = st.selectbox(
+                    "Damage Type:", 
+                    ["Not Specified"] + DAMAGE_MECHANISMS,
+                    help="Select damage type for specific information"
+                )
+        
+        # Operating Conditions Section
+        with st.expander("🌡️ **Operating Conditions**", expanded=True):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                temperature = st.number_input(
+                    "Temperature (°C)", 
+                    value=None, 
+                    min_value=-50, 
+                    max_value=1000, 
+                    placeholder="Optional",
+                    help="Operating temperature in Celsius"
+                )
+            
+            with col2:
+                pressure = st.number_input(
+                    "Pressure (bar)", 
+                    value=None, 
+                    min_value=0, 
+                    max_value=500, 
+                    placeholder="Optional",
+                    help="Operating pressure in bar"
+                )
+        
+        # Analysis Configuration Section
+        with st.expander("🔍 **Analysis Configuration**", expanded=True):
+            analysis_focus = st.selectbox(
+                "Focus Area:",
+                [
+                    "Comprehensive Analysis",
+                    "Damage Mechanisms Only",
+                    "Mitigation Strategies Only", 
+                    "Operating Limits Only"
+                ],
+                help="Choose the scope of your analysis"
+            )
+            
+            # Show current parameter summary
+            st.markdown("### 📊 **Parameter Summary**")
+            
+            # Create summary of selected parameters
+            selected_params = []
             if equipment_type != "Not Specified":
-                context_parts.append(f"in {equipment_type}")
+                selected_params.append(f"**Equipment:** {equipment_type}")
             if material != "Not Specified":
-                context_parts.append(f"({material})")
+                selected_params.append(f"**Material:** {material}")
             if environment != "Not Specified":
-                context_parts.append(f"for {environment}")
+                selected_params.append(f"**Environment:** {environment}")
+            if damage_mechanism != "Not Specified":
+                selected_params.append(f"**Damage Type:** {damage_mechanism}")
+            if temperature is not None:
+                selected_params.append(f"**Temperature:** {temperature}°C")
+            if pressure is not None:
+                selected_params.append(f"**Pressure:** {pressure} bar")
             
-            if context_parts:
-                query = f"{analysis_focus} for {' '.join(context_parts)}"
+            if selected_params:
+                for param in selected_params:
+                    st.markdown(f"- {param}")
             else:
-                query = f"{analysis_focus} - general MCI engineering guidance"
-            
-            # Store in session state for processing
-            st.session_state.analysis_query = query
-            st.session_state.analysis_context = equipment_context
-            st.session_state.run_analysis = True
-            st.rerun()
+                st.info("💡 Select parameters above to see summary")
         
-        # Clear results
-        if st.button("🗑️ Clear Results", use_container_width=True):
-            if "analysis_result" in st.session_state:
-                del st.session_state.analysis_result
-            if "analysis_query" in st.session_state:
-                del st.session_state.analysis_query
-            st.rerun()
-    
-    # Main content area
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        # Process analysis if requested
-        if st.session_state.get("run_analysis", False):
-            query = st.session_state.get("analysis_query", "")
-            context = st.session_state.get("analysis_context", {})
-            
-            # Check cache
-            cached_response = cache.get(query, context)
-            
-            if cached_response:
-                st.session_state.analysis_result = cached_response + "\n\n*[Cached response]*"
-            else:
-                with st.spinner("Generating comprehensive analysis..."):
-                    response = generate_response(query, vectorstores, llm, equipment_context=context)
-                    cache.set(query, response, context)
-                    st.session_state.analysis_result = response
-            
-            # Clear the run flag
-            st.session_state.run_analysis = False
+        # Action Buttons
+        st.markdown("---")
+        col1, col2, col3 = st.columns([2, 1, 1])
         
-        # Display results
-        if "analysis_result" in st.session_state:
-            st.markdown("## 📊 Analysis Results")
-            st.markdown(st.session_state.analysis_result)
+        with col1:
+            if st.button("🔍 **Run Analysis**", type="primary", use_container_width=True):
+                # Create equipment context
+                equipment_context = {
+                    'equipment_type': equipment_type,
+                    'material': material,
+                    'environment': environment,
+                    'damage_mechanism': damage_mechanism,
+                    'temperature': f"{temperature}°C" if temperature is not None else "Not Specified",
+                    'pressure': f"{pressure} bar" if pressure is not None else "Not Specified"
+                }
+                
+                # Create analysis query based on context
+                context_parts = []
+                if damage_mechanism != "Not Specified":
+                    context_parts.append(damage_mechanism)
+                if equipment_type != "Not Specified":
+                    context_parts.append(f"in {equipment_type}")
+                if material != "Not Specified":
+                    context_parts.append(f"({material})")
+                if environment != "Not Specified":
+                    context_parts.append(f"for {environment}")
+                
+                if context_parts:
+                    query = f"{analysis_focus} for {' '.join(context_parts)}"
+                else:
+                    query = f"{analysis_focus} - general MCI engineering guidance"
+                
+                # Store in session state for processing
+                st.session_state.analysis_query = query
+                st.session_state.analysis_context = equipment_context
+                st.session_state.run_analysis = True
+                st.rerun()
+        
+        with col2:
+            # Example configurations
+            if st.button("📝 **Load Example**", use_container_width=True):
+                st.info("💡 **Example Configuration Loaded**\n\nTry: Carbon Steel pressure vessel in marine environment with pitting corrosion")
+        
+        with col3:
+            # Help
+            if st.button("❓ **Help**", use_container_width=True):
+                st.info("""
+                **🔧 How to use:**
+                1. Select equipment parameters above
+                2. Choose analysis focus
+                3. Click 'Run Analysis'
+                4. Review comprehensive results
+                
+                **💡 Tips:**
+                - More parameters = more specific analysis
+                - All parameters are optional
+                - Results include API references
+                """)
+    
+    else:
+        # Results view with sidebar controls
+        with st.sidebar:
+            st.header("Analysis Controls")
             
-            # Export option
-            if st.button("📄 Export Analysis Report"):
+            if st.button("🔙 New Analysis", use_container_width=True, type="primary"):
+                # Clear results and return to input form
+                if "analysis_result" in st.session_state:
+                    del st.session_state.analysis_result
+                if "analysis_query" in st.session_state:
+                    del st.session_state.analysis_query
+                st.rerun()
+            
+            if st.button("📄 Export Report", use_container_width=True):
                 context = st.session_state.get("analysis_context", {})
                 timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
                 
@@ -1364,57 +1398,73 @@ EQUIPMENT PARAMETERS:
                     file_name=f"mci_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                     mime="text/plain"
                 )
-        else:
-            # Welcome message
-            st.markdown("""
-            ## 🔬 Welcome to SmartMCI Analysis!
             
-            This page provides **structured analysis** based on your specific equipment parameters.
+            st.markdown("---")
             
-            **How to use:**
-            1. Set your equipment parameters in the sidebar
-            2. Choose your analysis focus
-            3. Click "Run Analysis" for comprehensive results
+            # Show analysis context
+            st.markdown("### 📋 Analysis Context")
+            context = st.session_state.get("analysis_context", {})
+            context_items = []
             
-            **Analysis covers:**
-            - **Damage Mechanisms** (API 571) - Conditions and causes
-            - **Mitigation Strategies** (API 970) - Prevention methods
-            - **Operating Limits** (API 584) - Safe parameters
-            - **Specific Recommendations** - Context-based guidance
+            for key, value in context.items():
+                if value != "Not Specified":
+                    display_key = key.replace('_', ' ').title()
+                    context_items.append(f"**{display_key}:** {value}")
             
-            **Units:** All results use metric SI units
-            """)
+            if context_items:
+                for item in context_items:
+                    st.markdown(item)
+            else:
+                st.markdown("*General analysis*")
+            
+            # Cache info
+            if st.session_state.get("chat_cache"):
+                st.markdown("---")
+                st.markdown("### 💾 Cache Status")
+                st.caption(f"Stored analyses: {len(st.session_state.chat_cache)}")
+        
+        # Display results in main area
+        st.markdown("## 📊 Analysis Results")
+        st.markdown(st.session_state.analysis_result)
     
-    with col2:
-        # Context summary
-        st.markdown("### 📋 Current Context")
+    # Process analysis if requested
+    if st.session_state.get("run_analysis", False):
+        query = st.session_state.get("analysis_query", "")
+        context = st.session_state.get("analysis_context", {})
         
-        context_items = []
-        if equipment_type != "Not Specified":
-            context_items.append(f"**Equipment:** {equipment_type}")
-        if material != "Not Specified":
-            context_items.append(f"**Material:** {material}")
-        if environment != "Not Specified":
-            context_items.append(f"**Environment:** {environment}")
-        if damage_mechanism != "Not Specified":
-            context_items.append(f"**Damage Type:** {damage_mechanism}")
-        if temperature is not None:
-            context_items.append(f"**Temperature:** {temperature}°C")
-        if pressure is not None:
-            context_items.append(f"**Pressure:** {pressure} bar")
+        # Check cache
+        cached_response = cache.get(query, context)
         
-        if context_items:
-            for item in context_items:
-                st.markdown(item)
+        if cached_response:
+            st.session_state.analysis_result = cached_response + "\n\n*[Cached response]*"
         else:
-            st.markdown("*No specific context set*")
+            with st.spinner("Generating comprehensive analysis..."):
+                response = generate_response(query, vectorstores, llm, equipment_context=context)
+                cache.set(query, response, context)
+                st.session_state.analysis_result = response
         
+        # Clear the run flag
+        st.session_state.run_analysis = False
+        st.rerun()
+    
+    # Welcome message for new users (only when no results)
+    if not show_results and not st.session_state.get("analysis_result"):
         st.markdown("---")
+        st.markdown("""
+        ## 🔬 Welcome to SmartMCI Analysis!
         
-        # Cache info
-        if st.session_state.get("chat_cache"):
-            st.markdown("### 💾 Cache Status")
-            st.caption(f"Stored analyses: {len(st.session_state.chat_cache)}")
+        This page provides **structured analysis** based on your specific equipment parameters.
+        
+        **📋 Analysis covers:**
+        - **Damage Mechanisms** (API 571) - Conditions and causes
+        - **Mitigation Strategies** (API 970) - Prevention methods
+        - **Operating Limits** (API 584) - Safe parameters
+        - **Specific Recommendations** - Context-based guidance
+        
+        **🎯 Get started by configuring your equipment parameters above!**
+        
+        **Units:** All results use metric SI units
+        """)
 
 def main():
     """Main application with page navigation including calculator"""
