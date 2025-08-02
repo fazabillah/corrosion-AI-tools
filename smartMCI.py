@@ -575,7 +575,7 @@ def create_polite_redirect(query: str) -> str:
     """Create a helpful redirect for non-engineering topics"""
     return f"""I'm SmartMCI, specialized in Materials, Corrosion, and Integrity (MCI) engineering. While I'd love to help with "{query}", I'm designed to focus on engineering topics, particularly:
 
-**🛡️ Core Expertise on American Petroleum Institute (API):**
+**🛡️ Core Expertise:**
 - **Damage Mechanisms** (API 571) - Failure analysis, root causes
 - **Corrosion Control** (API 970) - Prevention, mitigation strategies  
 - **Integrity Management** (API 584) - Operating limits, safe windows
@@ -876,6 +876,13 @@ def calculator_page():
         # Calculate corrosion rate
         corrosion_rate, rate_error = calculate_corrosion_rate(initial_thickness, current_thickness, service_years)
         
+        # Initialize validation variable
+        validation = {
+            'status': 'not_validated',
+            'message': 'No validation performed',
+            'api_reference': 'Not available'
+        }
+        
         if rate_error:
             st.error(f"Calculation Error: {rate_error}")
         else:
@@ -922,6 +929,7 @@ def calculator_page():
             if material != "Not Specified" and environment != "Not Specified":
                 st.markdown("### 📚 **API 571 Validation**")
                 
+                # Update validation with actual results
                 validation = validate_corrosion_rate(corrosion_rate, material, environment)
                 
                 if validation["status"] == "normal":
@@ -980,9 +988,9 @@ def calculator_page():
                 'corrosion_rate': corrosion_rate,
                 'thickness_loss': thickness_loss,
                 'remaining_life': remaining_life if remaining_life is not None else 'N/A',
-                'validation_status': validation.get('status', 'Not validated') if material != "Not Specified" else 'Not validated',
-                'validation_message': validation.get('message', '') if material != "Not Specified" else '',
-                'api_reference': validation.get('api_reference', '') if material != "Not Specified" else '',
+                'validation_status': validation.get('status', 'not_validated'),
+                'validation_message': validation.get('message', 'No validation performed'),
+                'api_reference': validation.get('api_reference', 'Not available'),
                 'recommendations': '\n'.join([rec.replace('• ', '- ') for rec in recommendations])
             }
             
@@ -1007,7 +1015,7 @@ def calculator_page():
                 summary = f"""Equipment: {equipment_id or 'Not specified'}
 Corrosion Rate: {corrosion_rate:.3f} mm/year
 Remaining Life: {remaining_life:.1f} years if remaining_life is not None else 'N/A'
-Status: {validation.get('status', 'Not validated').title() if material != "Not Specified" else 'Not validated'}"""
+Status: {validation.get('status', 'not_validated').title()}"""
                 
                 st.download_button(
                     "📋 Quick Summary",
@@ -1154,9 +1162,11 @@ def chatbot_page():
     # Welcome message for new users
     if not st.session_state.chat_messages:
         st.markdown("""
+        ## 👋 Welcome to SmartMCI!
+
         I'm your expert consultant for **Materials, Corrosion & Integrity** engineering:
 
-        **🛡️ Core Expertise on American Petroleum Institute (API) Standard for:**
+        **🛡️ Core Expertise:**
         - **API 571** - Damage Mechanisms & Failure Analysis
         - **API 970** - Corrosion Control & Prevention  
         - **API 584** - Integrity Operating Windows
@@ -1166,6 +1176,11 @@ def chatbot_page():
         - Process safety and equipment reliability
         - Industrial standards and best practices
         - Design optimization for harsh environments
+
+        **Enhanced Capabilities:**
+        - 📚 **API Standards**: Comprehensive coverage of 571/970/584
+        - 🌐 **Web Search**: Latest engineering research and practices
+        - 💬 **Conversational**: Context-aware technical discussions
 
         **I excel at engineering topics and can help with broader technical questions while steering toward MCI best practices.**
 
@@ -1352,6 +1367,8 @@ EQUIPMENT PARAMETERS:
         else:
             # Welcome message
             st.markdown("""
+            ## 🔬 Welcome to SmartMCI Analysis!
+            
             This page provides **structured analysis** based on your specific equipment parameters.
             
             **How to use:**
