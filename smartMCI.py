@@ -1208,6 +1208,25 @@ def analysis_page():
     show_results = st.session_state.get("analysis_result") is not None
     
     if not show_results:
+        # Welcome message at the top
+        st.markdown("""
+        ## 🔬 Welcome to SmartMCI Analysis!
+        
+        This page provides **structured analysis** based on your specific equipment parameters.
+        
+        **📋 Analysis covers:**
+        - **Damage Mechanisms** (API 571) - Conditions and causes
+        - **Mitigation Strategies** (API 970) - Prevention methods
+        - **Operating Limits** (API 584) - Safe parameters
+        - **Specific Recommendations** - Context-based guidance
+        
+        **🎯 Configure your equipment parameters below to get started!**
+        
+        **Units:** All results use metric SI units
+        """)
+        
+        st.markdown("---")
+        
         # Input form on main page
         st.markdown("## 📋 Equipment Parameters")
         st.markdown("Configure your equipment details for comprehensive MCI analysis")
@@ -1446,25 +1465,6 @@ EQUIPMENT PARAMETERS:
         # Clear the run flag
         st.session_state.run_analysis = False
         st.rerun()
-    
-    # Welcome message for new users (only when no results)
-    if not show_results and not st.session_state.get("analysis_result"):
-        st.markdown("---")
-        st.markdown("""
-        ## 🔬 Welcome to SmartMCI Analysis!
-        
-        This page provides **structured analysis** based on your specific equipment parameters.
-        
-        **📋 Analysis covers:**
-        - **Damage Mechanisms** (API 571) - Conditions and causes
-        - **Mitigation Strategies** (API 970) - Prevention methods
-        - **Operating Limits** (API 584) - Safe parameters
-        - **Specific Recommendations** - Context-based guidance
-        
-        **🎯 Get started by configuring your equipment parameters above!**
-        
-        **Units:** All results use metric SI units
-        """)
 
 def main():
     """Main application with page navigation including calculator"""
