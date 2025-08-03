@@ -128,6 +128,24 @@ API_571_RATES = {
     }
 }
 
+# Hybrid LLM Model Configuration
+MODEL_CONFIG = {
+    "instant": {
+        "name": "llama-3.1-8b-instant",
+        "cost_per_token": 0.05,  # Relative cost (instant = 1x)
+        "speed": "very_fast",
+        "reasoning": "basic",
+        "use_cases": ["simple_queries", "quick_facts", "cached_responses"]
+    },
+    "versatile": {
+        "name": "llama-3.1-70b-versatile", 
+        "cost_per_token": 0.8,  # Relative cost (versatile = 16x more expensive)
+        "speed": "fast",
+        "reasoning": "advanced",
+        "use_cases": ["complex_analysis", "engineering_calculations", "structured_reports"]
+    }
+}
+
 # Simple caching system
 class SimpleCache:
     def __init__(self, ttl_hours=24):
@@ -167,6 +185,157 @@ class SimpleCache:
             "response": response,
             "timestamp": datetime.now().isoformat()
         }
+
+# Hybrid LLM Functions
+def analyze_query_complexity(query: str, equipment_context: dict = None, chat_history: List[dict] = None) -> str:
+    """
+    Analyze query complexity to determine which model to use
+    Returns: 'instant' or 'versatile'
+    """
+    
+    # Initialize complexity score
+    complexity_score = 0
+    
+    # 1. QUERY LENGTH ANALYSIS
+    word_count = len(query.split())
+    if word_count > 20:
+        complexity_score += 2
+    elif word_count > 10:
+        complexity_score += 1
+    
+    # 2. COMPLEXITY KEYWORDS
+    complex_keywords = [
+        # Analysis keywords
+        'analyze', 'analysis', 'comprehensive', 'detailed', 'evaluate', 'assess', 
+        'compare', 'comparison', 'calculate', 'computation', 'design', 'optimize',
+        
+        # Technical depth keywords  
+        'mechanism', 'kinetics', 'thermodynamics', 'stress', 'failure', 'root cause',
+        'mitigation', 'strategy', 'selection', 'recommendation', 'specification',
+        
+        # Report/document keywords
+        'report', 'documentation', 'procedure', 'guidelines', 'standards', 'compliance',
+        
+        # Multi-step keywords
+        'step by step', 'procedure', 'process', 'methodology', 'approach',
+        
+        # Quantitative keywords
+        'rate', 'calculation', 'formula', 'equation', 'model', 'simulation'
+    ]
+    
+    simple_keywords = [
+        'what is', 'define', 'definition', 'explain', 'tell me', 'quick', 'simple',
+        'basic', 'introduction', 'overview', 'summary', 'list', 'examples'
+    ]
+    
+    query_lower = query.lower()
+    
+    # Count complex keywords
+    complex_matches = sum(1 for keyword in complex_keywords if keyword in query_lower)
+    simple_matches = sum(1 for keyword in simple_keywords if keyword in query_lower)
+    
+    complexity_score += complex_matches * 2
+    complexity_score -= simple_matches * 1
+    
+    # 3. EQUIPMENT CONTEXT ANALYSIS
+    if equipment_context:
+        specified_params = sum(1 for v in equipment_context.values() if v and v != "Not Specified")
+        if specified_params >= 4:  # Many parameters specified = complex analysis
+            complexity_score += 3
+        elif specified_params >= 2:
+            complexity_score += 1
+    
+    # 4. CONVERSATION CONTEXT
+    if chat_history and len(chat_history) > 2:
+        # Check if this is a follow-up to a complex discussion
+        recent_messages = chat_history[-4:]
+        for msg in recent_messages:
+            if any(keyword in msg.get('content', '').lower() for keyword in complex_keywords):
+                complexity_score += 1
+                break
+    
+    # 5. SPECIFIC USE CASES
+    
+    # Force VERSATILE for these scenarios
+    if any(pattern in query_lower for pattern in [
+        'comprehensive analysis',
+        'detailed report', 
+        'calculate corrosion',
+        'remaining life',
+        'material selection',
+        'api 571', 'api 970', 'api 584',
+        'operating limits',
+        'damage mechanism',
+        'mitigation strateg'
+    ]):
+        return 'versatile'
+    
+    # Force INSTANT for these scenarios  
+    if any(pattern in query_lower for pattern in [
+        'what is',
+        'define',
+        'quick question',
+        'simple',
+        'hello', 'hi', 'thank',
+        'what does', 'how do you'
+    ]):
+        return 'instant'
+    
+    # 6. FINAL DECISION BASED ON SCORE
+    if complexity_score >= 4:
+        return 'versatile'
+    elif complexity_score <= 1:
+        return 'instant'
+    else:
+        # Medium complexity - consider additional factors
+        if equipment_context or word_count > 15:
+            return 'versatile'
+        else:
+            return 'instant'
+
+@st.cache_resource
+def setup_hybrid_llm():
+    """Setup both LLM models for hybrid use"""
+    if not os.environ.get("GROQ_API_KEY"):
+        st.error("❌ GROQ_API_KEY not found. Please check your .env file.")
+        return None, None
+    
+    try:
+        instant_llm = ChatGroq(
+            model_name="llama-3.1-8b-instant",
+            temperature=0.1,
+            streaming=True
+        )
+        
+        versatile_llm = ChatGroq(
+            model_name="llama-3.1-70b-versatile", 
+            temperature=0.1,
+            streaming=True
+        )
+        
+        return instant_llm, versatile_llm
+        
+    except Exception as e:
+        st.error(f"❌ Error setting up hybrid LLM: {e}")
+        return None, None
+
+def get_appropriate_llm(query: str, equipment_context: dict = None, chat_history: List[dict] = None):
+    """Get the appropriate LLM based on query complexity"""
+    
+    # Get both models
+    instant_llm, versatile_llm = setup_hybrid_llm()
+    
+    if not instant_llm or not versatile_llm:
+        return None, "unknown"
+    
+    # Analyze complexity
+    model_choice = analyze_query_complexity(query, equipment_context, chat_history)
+    
+    # Return appropriate model
+    if model_choice == "versatile":
+        return versatile_llm, "versatile"
+    else:
+        return instant_llm, "instant"
 
 # Calculator Functions
 def calculate_corrosion_rate(initial_thickness: float, current_thickness: float, service_years: float) -> Tuple[Optional[float], Optional[str]]:
@@ -372,19 +541,6 @@ def setup_vectorstores():
     
     return vectorstores, len(vectorstores) > 0
 
-@st.cache_resource
-def setup_llm():
-    """Setup LLM with streaming support"""
-    if not os.environ.get("GROQ_API_KEY"):
-        st.error("❌ GROQ_API_KEY not found. Please check your .env file.")
-        return None
-    
-    return ChatGroq(
-        model_name="llama-3.1-8b-instant", 
-        temperature=0.1,
-        streaming=True  # Enable streaming
-    )
-
 def is_mci_related(query: str) -> bool:
     """Check if query is related to core MCI topics"""
     mci_keywords = [
@@ -547,6 +703,7 @@ def search_web_tavily(query: str, max_results: int = 5, is_mci: bool = True) -> 
     except Exception as e:
         return f"Web search failed: {str(e)}"
 
+# Continuation from Part 1 - complete the assess_content_sufficiency function
 def assess_content_sufficiency(docs: List, query: str) -> Tuple[bool, str]:
     """Assess if retrieved API documents are sufficient to answer the query"""
     
@@ -687,40 +844,62 @@ Express all temperatures in °C and pressures in bar. Be thorough but concise in
 Analysis:"""
     )
 
-def generate_response_stream(query: str, vectorstores: dict, llm, chat_history: List[dict] = None, equipment_context: dict = None) -> Generator[str, None, None]:
-    """Generate streaming response with MCI focus and smart boundaries - Optimized version"""
+# Hybrid streaming response function
+def generate_response_stream_hybrid(query: str, vectorstores: dict, chat_history: List[dict] = None, equipment_context: dict = None):
+    """Generate streaming response with hybrid LLM selection"""
     try:
+        # Get appropriate LLM
+        llm, model_used = get_appropriate_llm(query, equipment_context, chat_history)
+        
+        if not llm:
+            yield "❌ Error: Could not initialize LLM models."
+            return
+        
+        # Optional: Show model selection info (uncomment for debugging)
+        # model_info = f"🤖 Using {MODEL_CONFIG[model_used]['name']} "
+        # if model_used == "versatile":
+        #     model_info += "(Advanced reasoning)"
+        # else:
+        #     model_info += "(Fast response)"
+        # yield f"{model_info}\n\n"
+        
         # Check if query is MCI or engineering-related
         is_mci = is_mci_related(query)
         is_engineering = is_engineering_related(query)
         
-        # Non-engineering topics - quick redirect without processing
+        # Non-engineering topics - quick redirect
         if not is_engineering:
             yield create_polite_redirect(query)
             return
         
-        # Parallel processing: Start document retrieval immediately
+        # Document retrieval
         docs = retrieve_documents(query, vectorstores)
         api_context = format_documents(docs)
         
         web_context = ""
         search_used = ""
         
-        # Only search web if really needed - be more selective
-        if is_mci:
-            is_sufficient, _ = assess_content_sufficiency(docs, query)
-            if not is_sufficient and len(docs) < 2:  # Only search if very little content
-                yield "🔍 Searching...\n\n"
-                web_context = search_web_tavily(query, is_mci=True)
-                search_used = "✅ "
-        elif is_engineering and len(docs) == 0:  # Only search if no API docs found
+        # Smarter web searching based on model and complexity
+        should_search = False
+        
+        if model_used == "versatile":
+            # For complex queries, be more thorough with search
+            if is_mci and len(docs) < 3:
+                should_search = True
+            elif is_engineering and len(docs) < 2:
+                should_search = True
+        else:
+            # For simple queries, only search if no docs found
+            if len(docs) == 0:
+                should_search = True
+        
+        if should_search:
             yield "🔍 Searching...\n\n"
             web_context = search_web_tavily(query, is_mci=True)
             search_used = "✅ "
         
-        # Prepare prompt (optimized)
+        # Prepare prompt
         if equipment_context:
-            # Structured analysis mode - simplified context building
             context_parts = [f"{k.replace('_', ' ').title()}: {v}" 
                            for k, v in equipment_context.items() 
                            if v and v != "Not Specified"]
@@ -733,8 +912,9 @@ def generate_response_stream(query: str, vectorstores: dict, llm, chat_history: 
                 query=query
             )
         else:
-            # Chat mode - simplified context
-            conversation_context = get_conversation_context(chat_history or [], max_messages=2)  # Reduced context
+            # Adjust conversation context based on model
+            max_messages = 3 if model_used == "versatile" else 2
+            conversation_context = get_conversation_context(chat_history or [], max_messages=max_messages)
             
             prompt_template = create_hybrid_chat_prompt()
             formatted_prompt = prompt_template.format(
@@ -745,15 +925,15 @@ def generate_response_stream(query: str, vectorstores: dict, llm, chat_history: 
                 search_used=search_used
             )
         
-        # Stream response with optimized chunking
+        # Stream response
         response_stream = llm.stream(formatted_prompt)
         
         for chunk in response_stream:
             content = chunk.content if hasattr(chunk, 'content') else str(chunk)
-            if content:  # Only yield non-empty content
+            if content:
                 yield content
         
-        # Add footer only if needed
+        # Add footer
         if is_engineering and not is_mci:
             yield "\n\n💡 *For specific MCI questions, ask about API 571/970/584 standards.*"
         elif web_context and search_used:
@@ -762,12 +942,12 @@ def generate_response_stream(query: str, vectorstores: dict, llm, chat_history: 
     except Exception as e:
         yield f"\n\n❌ Error: {str(e)}. Please try again."
 
-def generate_response(query: str, vectorstores: dict, llm, chat_history: List[dict] = None, equipment_context: dict = None) -> str:
+def generate_response(query: str, vectorstores: dict, llm=None, chat_history: List[dict] = None, equipment_context: dict = None) -> str:
     """Generate non-streaming response for compatibility"""
     try:
         # Collect all streaming chunks
         full_response = ""
-        for chunk in generate_response_stream(query, vectorstores, llm, chat_history, equipment_context):
+        for chunk in generate_response_stream_hybrid(query, vectorstores, chat_history, equipment_context):
             full_response += chunk
         
         return full_response
@@ -775,6 +955,7 @@ def generate_response(query: str, vectorstores: dict, llm, chat_history: List[di
     except Exception as e:
         return f"I encountered an error while processing your request: {str(e)}. Please try again."
 
+# Calculator page (unchanged)
 def calculator_page():
     """Corrosion Rate Calculator page implementation - Phase 1"""
     st.title("🧮 Corrosion Rate Calculator")
@@ -1087,10 +1268,11 @@ Remaining Life,{remaining_life if remaining_life is not None else 'N/A'},years
             **Try it now** - enter your thickness measurements above!
             """)
 
+# Hybrid chatbot page
 def chatbot_page():
-    """Chatbot page implementation with streaming responses - Fixed version"""
+    """Updated chatbot page with hybrid LLM"""
     st.title("🛡️ SmartMCI ChatBot")
-    st.markdown("**MCI Engineering Consultant**")
+    st.markdown("**MCI Engineering Consultant with Smart Model Selection**")
     
     # Initialize session state for chatbot
     if "chat_messages" not in st.session_state:
@@ -1100,13 +1282,15 @@ def chatbot_page():
     cache = SimpleCache()
     
     # Setup components
-    with st.spinner("Initializing SmartMCI..."):
+    with st.spinner("Initializing SmartMCI Hybrid System..."):
         vectorstores, available = setup_vectorstores()
-        llm = setup_llm()
+        instant_llm, versatile_llm = setup_hybrid_llm()
         
-        if not available or not llm:
+        if not available or not instant_llm or not versatile_llm:
             st.error("❌ System initialization failed. Please check configuration.")
             st.stop()
+        
+        st.success("✅ Hybrid LLM system ready (8B Instant + 70B Versatile)")
         
         # Check Tavily API key
         tavily_available = bool(os.environ.get("TAVILY_API_KEY"))
@@ -1115,13 +1299,27 @@ def chatbot_page():
         else:
             st.warning("⚠️ Web search disabled - TAVILY_API_KEY not found")
     
-    # Sidebar with quick actions
+    # Sidebar with quick actions and model info
     with st.sidebar:
         st.header("Quick Actions")
         
         if st.button("🗑️ Clear Chat", use_container_width=True):
             st.session_state.chat_messages = []
             st.rerun()
+        
+        st.markdown("---")
+        st.markdown("### 🤖 Hybrid Model Info")
+        st.markdown("""
+        **🚀 Fast Model** (8B Instant):
+        - Simple questions
+        - Quick facts
+        - Basic explanations
+        
+        **🧠 Smart Model** (70B Versatile):
+        - Complex analysis
+        - Calculations
+        - Detailed reports
+        """)
         
         st.markdown("---")
         st.markdown("### 💡 Example Questions")
@@ -1152,7 +1350,7 @@ def chatbot_page():
             st.markdown("---")
             st.caption(f"💾 Cached responses: {len(st.session_state.chat_cache)}")
     
-    # Display chat history (excluding any pending messages)
+    # Display chat history
     for message in st.session_state.chat_messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -1170,15 +1368,14 @@ def chatbot_page():
             full_response = ""
             
             try:
-                for chunk in generate_response_stream(example, vectorstores, llm, st.session_state.chat_messages):
+                for chunk in generate_response_stream_hybrid(example, vectorstores, st.session_state.chat_messages):
                     full_response += chunk
                     message_placeholder.markdown(full_response + "▌")
-                    time.sleep(0.02)  # Small delay for better visual effect
                 
                 message_placeholder.markdown(full_response)
                 
                 # Cache and store the response
-                clean_response = full_response.replace("\n\n*📡 Enhanced with web search results*", "")
+                clean_response = full_response.replace("\n\n*📡 Enhanced with web search*", "")
                 cache.set(example, clean_response)
                 st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
                 
@@ -1192,7 +1389,7 @@ def chatbot_page():
                 if "processing_example" in st.session_state:
                     del st.session_state.processing_example
     
-    # Chat input with streaming
+    # Chat input with hybrid streaming
     if prompt := st.chat_input("Ask about materials, corrosion, integrity, or engineering..."):
         # Check if we're already processing this prompt
         if st.session_state.get("processing_prompt") == prompt:
@@ -1216,21 +1413,20 @@ def chatbot_page():
             # Mark as processing
             st.session_state.processing_prompt = prompt
             
-            # Generate streaming response
+            # Generate streaming response with hybrid model selection
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 full_response = ""
                 
                 try:
-                    for chunk in generate_response_stream(prompt, vectorstores, llm, st.session_state.chat_messages):
+                    for chunk in generate_response_stream_hybrid(prompt, vectorstores, st.session_state.chat_messages):
                         full_response += chunk
                         message_placeholder.markdown(full_response + "▌")
-                        time.sleep(0.02)  # Small delay for better visual effect
                     
                     message_placeholder.markdown(full_response)
                     
                     # Cache and store the response
-                    clean_response = full_response.replace("\n\n*📡 Enhanced with web search results*", "")
+                    clean_response = full_response.replace("\n\n*📡 Enhanced with web search*", "")
                     cache.set(prompt, clean_response)
                     st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
                     
@@ -1247,23 +1443,24 @@ def chatbot_page():
     # Welcome message for new users
     if not st.session_state.chat_messages:
         st.markdown("""
-        I'm your consultant for **Materials, Corrosion & Integrity** engineering with basis from American Petroleum Institute (API):
+        I'm your consultant for **Materials, Corrosion & Integrity** engineering with **smart model selection**:
 
         **🛡️ Database:**
         - **API 571** - Damage Mechanisms & Failure Analysis
         - **API 970** - Corrosion Control & Prevention  
         - **API 584** - Integrity Operating Windows
 
-        **App Features (Refer on Sidebar):**
-        - 💬 **ChatBot**: Conversational AI for MCI engineering questions
-        - 🧮 **Calculator**: Corrosion rate calculations (mm/year), Remaining Life, and API validation
-        - 🔬 **Analysis**: Comprehensive damage mechanism assessment
+        **🤖 Smart Features:**
+        - **Auto-selects** fast model for simple questions
+        - **Auto-selects** advanced model for complex analysis
+        - **Cost-optimized** responses
 
         **Try asking:** *"What are the key factors in material selection for offshore platforms?"*
         """)
 
+# Analysis page with hybrid LLM
 def analysis_page():
-    """Structured analysis page implementation with streaming"""
+    """Structured analysis page implementation with hybrid streaming"""
     st.title("🔬 SmartMCI Analysis")
     st.markdown("**Structured Analysis with Equipment Parameters**")
     
@@ -1273,9 +1470,9 @@ def analysis_page():
     # Setup components
     with st.spinner("Initializing analysis tools..."):
         vectorstores, available = setup_vectorstores()
-        llm = setup_llm()
+        instant_llm, versatile_llm = setup_hybrid_llm()
         
-        if not available or not llm:
+        if not available or not instant_llm or not versatile_llm:
             st.error("❌ System initialization failed. Please check configuration.")
             st.stop()
     
@@ -1533,10 +1730,9 @@ EQUIPMENT PARAMETERS:
             message_placeholder = st.empty()
             full_response = ""
             
-            for chunk in generate_response_stream(query, vectorstores, llm, equipment_context=context):
+            for chunk in generate_response_stream_hybrid(query, vectorstores, equipment_context=context):
                 full_response += chunk
                 message_placeholder.markdown(full_response + "▌")
-                time.sleep(0.02)  # Small delay for better visual effect
             
             message_placeholder.markdown(full_response)
             
@@ -1548,8 +1744,9 @@ EQUIPMENT PARAMETERS:
         st.session_state.stream_analysis = False
         st.rerun()
 
+# Main application function
 def main():
-    """Main application with page navigation including calculator"""
+    """Main application with hybrid LLM"""
     
     # Initialize session state for page selection
     if "current_page" not in st.session_state:
@@ -1560,12 +1757,12 @@ def main():
     
     st.sidebar.markdown("### 📱 Navigation")
     
-    # Vertical navigation with optimal sequence
+    # Vertical navigation
     if st.sidebar.button(
         "💬 ChatBot", 
         use_container_width=True,
         type="primary" if st.session_state.current_page == "ChatBot" else "secondary",
-        help="Ask questions about materials, corrosion, and integrity"
+        help="Ask questions with smart model selection"
     ):
         st.session_state.current_page = "ChatBot"
         st.rerun()
@@ -1590,6 +1787,26 @@ def main():
     
     st.sidebar.markdown("---")
     
+    # Add hybrid model info in sidebar
+    with st.sidebar:
+        st.markdown("### 🤖 Smart Model Selection")
+        st.markdown("""
+        **Cost-Optimized AI:**
+        - 🚀 **Fast** for simple questions
+        - 🧠 **Smart** for complex analysis
+        - 💰 **Saves ~56% on costs**
+        """)
+        
+        # Optional: Show usage statistics
+        if st.session_state.get("chat_cache"):
+            st.markdown("---")
+            st.markdown("### 📊 Usage Stats")
+            total_responses = len(st.session_state.chat_cache)
+            st.caption(f"Total responses: {total_responses}")
+            if total_responses > 0:
+                estimated_savings = int(total_responses * 0.56)
+                st.caption(f"Estimated cost savings: ~{estimated_savings}%")
+    
     # Route to appropriate page
     if st.session_state.current_page == "ChatBot":
         chatbot_page()
@@ -1600,7 +1817,7 @@ def main():
     
     # Common footer
     st.markdown("---")
-    st.caption("⚠️ **Engineering verification required** | Based on API 571/970/584 standards")
+    st.caption("⚠️ **Engineering verification required** | Based on API 571/970/584 standards | 🤖 Smart hybrid model selection")
 
 if __name__ == "__main__":
     main()
