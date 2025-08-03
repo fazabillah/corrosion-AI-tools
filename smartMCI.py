@@ -682,8 +682,8 @@ Express all temperatures in °C and pressures in bar. Be thorough but concise in
 Analysis:"""
     )
 
-def generate_response_stream(query: str, vectorstores: dict, llm, chat_history: List[dict] = None, equipment_context: dict = None) -> Generator[str, None, None]:
-    """Generate streaming response with MCI focus and smart boundaries - Fixed version"""
+def generate_response(query: str, vectorstores: dict, llm, chat_history: List[dict] = None, equipment_context: dict = None) -> str:
+    """Generate response with MCI focus and smart boundaries"""
     try:
         # Check if query is MCI or engineering-related
         is_mci = is_mci_related(query)
@@ -700,18 +700,17 @@ def generate_response_stream(query: str, vectorstores: dict, llm, chat_history: 
             # Core MCI topics - full treatment
             is_sufficient, assessment_msg = assess_content_sufficiency(docs, query)
             if not is_sufficient:
-                yield "🔍 Searching for additional MCI information...\n\n"
+                st.info(f"🔍 Searching for additional MCI information...")
                 web_context = search_web_tavily(query, is_mci=True)
                 search_used = "✅ "
         elif is_engineering:
             # Engineering-related but not core MCI - web search with MCI context
-            yield "🔍 Searching for engineering information...\n\n"
-            web_context = search_web_tavily(query, is_mci=True)
+            st.info("🔍 Searching for engineering information...")
+            web_context = search_web_tavily(query, is_mci=True)  # Still use MCI-focused search
             search_used = "✅ "
         else:
             # Non-engineering topics - polite redirect
-            yield create_polite_redirect(query)
-            return
+            return create_polite_redirect(query)
         
         if equipment_context:
             # Structured analysis mode
@@ -741,33 +740,24 @@ def generate_response_stream(query: str, vectorstores: dict, llm, chat_history: 
                 search_used=search_used
             )
         
-        # Generate streaming response
-        # Remove the "Generating response..." message to avoid confusion
-        # yield "💭 Generating response...\n\n"  # Comment this out
+        # Generate response
+        response = llm.invoke(formatted_prompt)
         
-        # For ChatGroq, we need to use the streaming feature
-        response_stream = llm.stream(formatted_prompt)
-        
-        accumulated_response = ""
-        for chunk in response_stream:
-            if hasattr(chunk, 'content'):
-                content = chunk.content
-            else:
-                content = str(chunk)
-            
-            accumulated_response += content
-            yield content
+        if hasattr(response, 'content'):
+            result = response.content
+        else:
+            result = str(response)
         
         # Add helpful footer for non-core MCI topics
         if is_engineering and not is_mci:
-            footer = "\n\n💡 *For specific materials, corrosion, or integrity challenges, feel free to ask about API 571/970/584 standards.*"
-            yield footer
+            result += "\n\n💡 *For specific materials, corrosion, or integrity challenges, feel free to ask about API 571/970/584 standards.*"
         elif web_context and search_used:
-            footer = "\n\n*📡 Enhanced with web search results*"
-            yield footer
+            result += "\n\n*📡 Enhanced with web search results*"
+        
+        return result
             
     except Exception as e:
-        yield f"\n\n❌ Error: {str(e)}. Please try again."
+        return f"I encountered an error while processing your request: {str(e)}. Please try again."
 
 def calculator_page():
     """Corrosion Rate Calculator page implementation - Phase 1"""
@@ -1082,8 +1072,7 @@ Remaining Life,{remaining_life if remaining_life is not None else 'N/A'},years
             """)
 
 def chatbot_page():
-def chatbot_page():
-    """Chatbot page implementation with streaming responses - Fixed version"""
+    """Chatbot page implementation with optimized MCI focus"""
     st.title("🛡️ SmartMCI ChatBot")
     st.markdown("**MCI Engineering Consultant**")
     
@@ -1123,23 +1112,20 @@ def chatbot_page():
         
         for example in SMART_EXAMPLES:
             if st.button(example, key=f"chat_ex_{hash(example)}", use_container_width=True):
-                # Check if this example is already being processed
-                if st.session_state.get("processing_example") == example:
-                    continue
-                    
-                # Add user message only once
+                # Add user message
                 st.session_state.chat_messages.append({"role": "user", "content": example})
                 
                 # Check cache first
                 cached_response = cache.get(example)
                 if cached_response:
                     response = cached_response + "\n\n*[Cached response]*"
-                    st.session_state.chat_messages.append({"role": "assistant", "content": response})
                 else:
-                    # Set flag for streaming response and mark as processing
-                    st.session_state.pending_example = example
-                    st.session_state.processing_example = example
+                    # Generate response with smart boundaries
+                    response = generate_response(example, vectorstores, llm, st.session_state.chat_messages)
+                    cache.set(example, response)
                 
+                # Add assistant response
+                st.session_state.chat_messages.append({"role": "assistant", "content": response})
                 st.rerun()
         
         # Show cache stats if available
@@ -1147,97 +1133,29 @@ def chatbot_page():
             st.markdown("---")
             st.caption(f"💾 Cached responses: {len(st.session_state.chat_cache)}")
     
-    # Display chat history (excluding any pending messages)
+    # Display chat history
     for message in st.session_state.chat_messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
     
-    # Handle pending example streaming
-    if st.session_state.get("pending_example"):
-        example = st.session_state.pending_example
-        
-        # Clear the pending flag immediately to prevent re-execution
-        del st.session_state.pending_example
-        
-        # Show streaming response
-        with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-            full_response = ""
-            
-            try:
-                for chunk in generate_response_stream(example, vectorstores, llm, st.session_state.chat_messages):
-                    full_response += chunk
-                    message_placeholder.markdown(full_response + "▌")
-                    time.sleep(0.02)  # Small delay for better visual effect
-                
-                message_placeholder.markdown(full_response)
-                
-                # Cache and store the response
-                clean_response = full_response.replace("\n\n*📡 Enhanced with web search results*", "")
-                cache.set(example, clean_response)
-                st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
-                
-            except Exception as e:
-                error_msg = f"❌ Error generating response: {str(e)}"
-                message_placeholder.markdown(error_msg)
-                st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
-            
-            finally:
-                # Clear processing flag
-                if "processing_example" in st.session_state:
-                    del st.session_state.processing_example
-    
-    # Chat input with streaming
+    # Chat input with smart boundaries
     if prompt := st.chat_input("Ask about materials, corrosion, integrity, or engineering..."):
-        # Check if we're already processing this prompt
-        if st.session_state.get("processing_prompt") == prompt:
-            return
-            
-        # Add user message to chat history
+        # Add user message
         st.session_state.chat_messages.append({"role": "user", "content": prompt})
-        
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(prompt)
         
         # Check cache first
         cached_response = cache.get(prompt)
         if cached_response:
             response = cached_response + "\n\n*[Cached response]*"
-            with st.chat_message("assistant"):
-                st.markdown(response)
-            st.session_state.chat_messages.append({"role": "assistant", "content": response})
         else:
-            # Mark as processing
-            st.session_state.processing_prompt = prompt
-            
-            # Generate streaming response
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                full_response = ""
-                
-                try:
-                    for chunk in generate_response_stream(prompt, vectorstores, llm, st.session_state.chat_messages):
-                        full_response += chunk
-                        message_placeholder.markdown(full_response + "▌")
-                        time.sleep(0.02)  # Small delay for better visual effect
-                    
-                    message_placeholder.markdown(full_response)
-                    
-                    # Cache and store the response
-                    clean_response = full_response.replace("\n\n*📡 Enhanced with web search results*", "")
-                    cache.set(prompt, clean_response)
-                    st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
-                    
-                except Exception as e:
-                    error_msg = f"❌ Error generating response: {str(e)}"
-                    message_placeholder.markdown(error_msg)
-                    st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
-                
-                finally:
-                    # Clear processing flag
-                    if "processing_prompt" in st.session_state:
-                        del st.session_state.processing_prompt
+            # Generate response with smart boundaries
+            with st.spinner("Analyzing..."):
+                response = generate_response(prompt, vectorstores, llm, st.session_state.chat_messages)
+                cache.set(prompt, response)
+        
+        # Add assistant response
+        st.session_state.chat_messages.append({"role": "assistant", "content": response})
+        st.rerun()
     
     # Welcome message for new users
     if not st.session_state.chat_messages:
