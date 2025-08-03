@@ -533,13 +533,6 @@ def setup_vectorstores():
                 
         except Exception as e:
             st.error(f"❌ Error connecting to {api_name.upper()}: {e}")
-    
-    if vectorstores:
-        st.success(f"✅ Connected to: {', '.join([f'{k.upper()}' for k in vectorstores.keys()])}")
-    else:
-        st.error("❌ No API documents found. Please run ingestion script first.")
-    
-    return vectorstores, len(vectorstores) > 0
 
 def is_mci_related(query: str) -> bool:
     """Check if query is related to core MCI topics"""
@@ -1272,7 +1265,7 @@ Remaining Life,{remaining_life if remaining_life is not None else 'N/A'},years
 def chatbot_page():
     """Updated chatbot page with hybrid LLM"""
     st.title("🛡️ SmartMCI ChatBot")
-    st.markdown("**MCI Engineering Consultant with Smart Model Selection**")
+    st.markdown("**MCI Engineering Consultant**")
     
     # Initialize session state for chatbot
     if "chat_messages" not in st.session_state:
@@ -1289,15 +1282,6 @@ def chatbot_page():
         if not available or not instant_llm or not versatile_llm:
             st.error("❌ System initialization failed. Please check configuration.")
             st.stop()
-        
-        st.success("✅ Hybrid LLM system ready (8B Instant + 70B Versatile)")
-        
-        # Check Tavily API key
-        tavily_available = bool(os.environ.get("TAVILY_API_KEY"))
-        if tavily_available:
-            st.success("🌐 Web search enabled via Tavily")
-        else:
-            st.warning("⚠️ Web search disabled - TAVILY_API_KEY not found")
     
     # Sidebar with quick actions and model info
     with st.sidebar:
@@ -1306,20 +1290,6 @@ def chatbot_page():
         if st.button("🗑️ Clear Chat", use_container_width=True):
             st.session_state.chat_messages = []
             st.rerun()
-        
-        st.markdown("---")
-        st.markdown("### 🤖 Hybrid Model Info")
-        st.markdown("""
-        **🚀 Fast Model** (8B Instant):
-        - Simple questions
-        - Quick facts
-        - Basic explanations
-        
-        **🧠 Smart Model** (70B Versatile):
-        - Complex analysis
-        - Calculations
-        - Detailed reports
-        """)
         
         st.markdown("---")
         st.markdown("### 💡 Example Questions")
@@ -1443,7 +1413,7 @@ def chatbot_page():
     # Welcome message for new users
     if not st.session_state.chat_messages:
         st.markdown("""
-        I'm your consultant for **Materials, Corrosion & Integrity** engineering with **smart model selection**:
+        I'm your consultant for **Materials, Corrosion & Integrity** engineering on American Petroleum Institute (API) standards:
 
         **🛡️ Database:**
         - **API 571** - Damage Mechanisms & Failure Analysis
@@ -1786,26 +1756,6 @@ def main():
         st.rerun()
     
     st.sidebar.markdown("---")
-    
-    # Add hybrid model info in sidebar
-    with st.sidebar:
-        st.markdown("### 🤖 Smart Model Selection")
-        st.markdown("""
-        **Cost-Optimized AI:**
-        - 🚀 **Fast** for simple questions
-        - 🧠 **Smart** for complex analysis
-        - 💰 **Saves ~56% on costs**
-        """)
-        
-        # Optional: Show usage statistics
-        if st.session_state.get("chat_cache"):
-            st.markdown("---")
-            st.markdown("### 📊 Usage Stats")
-            total_responses = len(st.session_state.chat_cache)
-            st.caption(f"Total responses: {total_responses}")
-            if total_responses > 0:
-                estimated_savings = int(total_responses * 0.56)
-                st.caption(f"Estimated cost savings: ~{estimated_savings}%")
     
     # Route to appropriate page
     if st.session_state.current_page == "ChatBot":
