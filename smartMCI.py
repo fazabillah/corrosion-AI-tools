@@ -1277,7 +1277,7 @@ def chatbot_page():
     cache = SimpleCache()
     
     # Setup components
-    with st.spinner("Initializing SmartMCI Hybrid System..."):
+    with st.spinner("Initializing SmartMCI System..."):
         vectorstores, available = setup_vectorstores()
         instant_llm, versatile_llm = setup_hybrid_llm()
         
