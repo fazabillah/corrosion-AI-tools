@@ -1422,7 +1422,7 @@ def chatbot_page():
     # Welcome message for new users
     if not st.session_state.chat_messages:
         st.markdown("""
-        I'm your consultant for **Materials, Corrosion & Integrity** engineering on American Petroleum Institute (API) standards:
+        I'm your consultant for **Materials, Corrosion & Integrity (MCI)** based on American Petroleum Institute (API) standards:
 
         **🛡️ Database:**
         - **API 571** - Damage Mechanisms & Failure Analysis
@@ -1776,7 +1776,7 @@ def main():
     
     # Common footer
     st.markdown("---")
-    st.caption("⚠️ **Engineering verification required** | Based on API 571/970/584 standards | 🤖 Smart hybrid model selection")
+    st.caption("⚠️ **Engineering verification required** | Based on API 571/970/584 standards")
 
 if __name__ == "__main__":
     main()
