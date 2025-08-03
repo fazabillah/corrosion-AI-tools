@@ -533,6 +533,13 @@ def setup_vectorstores():
                 
         except Exception as e:
             st.error(f"❌ Error connecting to {api_name.upper()}: {e}")
+    
+    if vectorstores:
+        st.success(f"✅ Connected to: {', '.join([f'{k.upper()}' for k in vectorstores.keys()])}")
+    else:
+        st.error("❌ No API documents found. Please run ingestion script first.")
+    
+    return vectorstores, len(vectorstores) > 0
 
 def is_mci_related(query: str) -> bool:
     """Check if query is related to core MCI topics"""
@@ -1282,6 +1289,13 @@ def chatbot_page():
         if not available or not instant_llm or not versatile_llm:
             st.error("❌ System initialization failed. Please check configuration.")
             st.stop()
+        
+        # Check Tavily API key
+        tavily_available = bool(os.environ.get("TAVILY_API_KEY"))
+        if tavily_available:
+            st.success("🌐 Web search enabled via Tavily")
+        else:
+            st.warning("⚠️ Web search disabled - TAVILY_API_KEY not found")
     
     # Sidebar with quick actions and model info
     with st.sidebar:
