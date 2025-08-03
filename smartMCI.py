@@ -1074,7 +1074,7 @@ Remaining Life,{remaining_life if remaining_life is not None else 'N/A'},years
 def chatbot_page():
     """Chatbot page implementation with optimized MCI focus"""
     st.title("🛡️ SmartMCI ChatBot")
-    st.markdown("**Expert MCI Engineering Consultant**")
+    st.markdown("**MCI Engineering Consultant**")
     
     # Initialize session state for chatbot
     if "chat_messages" not in st.session_state:
