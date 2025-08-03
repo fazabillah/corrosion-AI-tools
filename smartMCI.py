@@ -1051,8 +1051,6 @@ Remaining Life,{remaining_life if remaining_life is not None else 'N/A'},years
         # Welcome message when no calculations performed
         if not (initial_thickness and current_thickness and service_years):
             st.markdown("""
-            ## 👋 Welcome to the Corrosion Rate Calculator!
-            
             This tool helps you calculate corrosion rates and predict remaining equipment life based on thickness measurements.
             
             **🎯 What you get:**
@@ -1162,27 +1160,17 @@ def chatbot_page():
     # Welcome message for new users
     if not st.session_state.chat_messages:
         st.markdown("""
-        ## 👋 Welcome to SmartMCI!
+        I'm your consultant for **Materials, Corrosion & Integrity** engineering with basis from American Petroleum Institute (API):
 
-        I'm your expert consultant for **Materials, Corrosion & Integrity** engineering:
-
-        **🛡️ Core Expertise:**
+        **🛡️ Database:**
         - **API 571** - Damage Mechanisms & Failure Analysis
         - **API 970** - Corrosion Control & Prevention  
         - **API 584** - Integrity Operating Windows
 
-        **🔧 Engineering Support:**
-        - Materials selection and behavior
-        - Process safety and equipment reliability
-        - Industrial standards and best practices
-        - Design optimization for harsh environments
-
-        **Enhanced Capabilities:**
-        - 📚 **API Standards**: Comprehensive coverage of 571/970/584
-        - 🌐 **Web Search**: Latest engineering research and practices
-        - 💬 **Conversational**: Context-aware technical discussions
-
-        **I excel at engineering topics and can help with broader technical questions while steering toward MCI best practices.**
+        **App Features (Refer on Sidebar):**
+        - 📚 **ChatBot**: Conversational AI for MCI engineering questions
+        - 🌐 **Calculator**: Corrosion rate calculations (mm/year), Remaining Life, and API validation
+        - 💬 **Analysis**: Comprehensive damage mechanism assessment
 
         **Try asking:** *"What are the key factors in material selection for offshore platforms?"*
         """)
@@ -1210,8 +1198,6 @@ def analysis_page():
     if not show_results:
         # Welcome message at the top
         st.markdown("""
-        ## 🔬 Welcome to SmartMCI Analysis!
-        
         This page provides **structured analysis** based on your specific equipment parameters.
         
         **📋 Analysis covers:**
@@ -1221,8 +1207,6 @@ def analysis_page():
         - **Specific Recommendations** - Context-based guidance
         
         **🎯 Configure your equipment parameters below to get started!**
-        
-        **Units:** All results use metric SI units
         """)
         
         st.markdown("---")
