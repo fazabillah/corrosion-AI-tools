@@ -957,14 +957,25 @@ def generate_response(query: str, vectorstores: dict, llm=None, chat_history: Li
 
 # Calculator page (unchanged)
 def calculator_page():
-    """Corrosion Rate Calculator page implementation - Phase 1"""
+    """Enhanced Corrosion Rate Calculator with API document integration"""
     st.title("🧮 Corrosion Rate Calculator")
-    st.markdown("**Calculate corrosion rates and remaining equipment life**")
+    st.markdown("**Calculate corrosion rates with API-powered recommendations**")
     
     # Initialize session state for calculator
     if "calc_results" not in st.session_state:
         st.session_state.calc_results = {}
     
+    # Setup components for API integration
+    with st.spinner("Initializing calculator with API database..."):
+        vectorstores, available = setup_vectorstores()
+        instant_llm, versatile_llm = setup_hybrid_llm()
+        
+        if not available:
+            st.warning("⚠️ API documents not available - using basic calculations only")
+        else:
+            st.success("✅ Calculator enhanced with API 571/970/584 database")
+    
+    # ... (keep all your existing input fields) ...
     # Main calculator interface
     st.markdown("### 📏 **Thickness Measurements**")
     
@@ -1066,11 +1077,33 @@ def calculator_page():
     elif min_thickness and current_thickness < min_thickness * 1.1:
         st.warning("⚠️ WARNING: Approaching minimum thickness")
         validation_messages.append("Near minimum thickness")
+
+    # NEW: API-Enhanced Analysis Toggle
+    st.markdown("### 🔬 **Enhanced Analysis Options**")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        enable_api_analysis = st.checkbox(
+            "📚 Enable API Document Analysis", 
+            value=True,
+            help="Get detailed recommendations from API 571/970/584 standards"
+        )
+    
+    with col2:
+        if enable_api_analysis and available:
+            analysis_depth = st.selectbox(
+                "Analysis Depth:",
+                ["Basic", "Detailed", "Comprehensive"],
+                index=1,
+                help="Choose level of API-based analysis"
+            )
+        else:
+            analysis_depth = "Basic"
     
     # Perform calculations
     if initial_thickness and current_thickness and service_years and not validation_messages:
         
-        # Calculate corrosion rate
+        # Calculate corrosion rate (existing function)
         corrosion_rate, rate_error = calculate_corrosion_rate(initial_thickness, current_thickness, service_years)
         
         # Initialize validation variable
@@ -1083,7 +1116,7 @@ def calculator_page():
         if rate_error:
             st.error(f"Calculation Error: {rate_error}")
         else:
-            # Calculate remaining life
+            # Calculate remaining life (existing function)
             remaining_life, life_error = calculate_remaining_life(current_thickness, min_thickness, corrosion_rate)
             
             # Display main results
@@ -1122,11 +1155,9 @@ def calculator_page():
                 else:
                     st.metric("Remaining Life", "N/A", help=life_error or "Cannot calculate")
             
-            # API validation if material and environment specified
+            # Static API validation (existing)
             if material != "Not Specified" and environment != "Not Specified":
                 st.markdown("### 📚 **API 571 Validation**")
-                
-                # Update validation with actual results
                 validation = validate_corrosion_rate(corrosion_rate, material, environment)
                 
                 if validation["status"] == "normal":
@@ -1141,17 +1172,73 @@ def calculator_page():
                 if validation["api_reference"]:
                     st.caption(f"Reference: {validation['api_reference']}")
             
-            # Generate chart
+            # NEW: Enhanced API Document Analysis
+            if enable_api_analysis and available and vectorstores:
+                st.markdown("### 🔬 **API Document Analysis**")
+                
+                # Create context for API analysis
+                equipment_context = {
+                    'equipment_type': equipment_type,
+                    'material': material,
+                    'environment': environment,
+                    'corrosion_rate': f"{corrosion_rate:.3f} mm/year",
+                    'remaining_life': f"{remaining_life:.1f} years" if remaining_life else "N/A",
+                    'thickness_loss': f"{thickness_loss:.2f} mm",
+                    'service_years': f"{service_years:.1f} years"
+                }
+                
+                # Generate query based on analysis depth
+                if analysis_depth == "Comprehensive":
+                    api_query = f"""Comprehensive corrosion analysis for {material} {equipment_type} in {environment} 
+                    with corrosion rate {corrosion_rate:.3f} mm/year. Include API 571 damage mechanisms, 
+                    API 970 mitigation strategies, and API 584 operating limits."""
+                elif analysis_depth == "Detailed":
+                    api_query = f"""Detailed analysis of {corrosion_rate:.3f} mm/year corrosion rate for {material} 
+                    in {environment}. What do API standards recommend for this scenario?"""
+                else:
+                    api_query = f"""API guidance for {material} showing {corrosion_rate:.3f} mm/year corrosion 
+                    in {environment}. What are the key considerations?"""
+                
+                # Show API analysis with streaming
+                with st.expander("📖 **API Standards Analysis**", expanded=True):
+                    if st.button("🔍 Generate API Analysis", type="primary"):
+                        with st.spinner("Analyzing with API 571/970/584 standards..."):
+                            message_placeholder = st.empty()
+                            full_response = ""
+                            
+                            try:
+                                for chunk in generate_response_stream_hybrid(
+                                    api_query, 
+                                    vectorstores, 
+                                    equipment_context=equipment_context
+                                ):
+                                    full_response += chunk
+                                    message_placeholder.markdown(full_response + "▌")
+                                
+                                message_placeholder.markdown(full_response)
+                                
+                                # Store API analysis in session state
+                                st.session_state.api_analysis = full_response
+                                
+                            except Exception as e:
+                                st.error(f"Error in API analysis: {str(e)}")
+                    
+                    # Show stored API analysis if available
+                    if st.session_state.get("api_analysis"):
+                        st.markdown(st.session_state.api_analysis)
+            
+            # Generate chart (existing)
             if st.checkbox("📈 Show Thickness Trend Chart"):
                 chart = create_thickness_trend_chart(initial_thickness, current_thickness, service_years, corrosion_rate)
                 if chart:
                     st.plotly_chart(chart, use_container_width=True)
             
-            # Recommendations
-            st.markdown("### 💡 **Recommendations**")
+            # Enhanced Recommendations (combining static + API)
+            st.markdown("### 💡 **Enhanced Recommendations**")
             
             recommendations = []
             
+            # Static recommendations (existing logic)
             if corrosion_rate > 1.0:
                 recommendations.append("• **High corrosion rate detected** - Review service conditions and consider mitigation")
                 recommendations.append("• **Increase inspection frequency** - Monitor more closely")
@@ -1169,10 +1256,14 @@ def calculator_page():
             elif remaining_life is not None and remaining_life < 10:
                 recommendations.append("• **Begin replacement planning** - Consider long-term maintenance strategy")
             
+            # Add API-enhanced note
+            if enable_api_analysis and available:
+                recommendations.append("• **API Analysis Available** - See detailed API standards analysis above")
+            
             for rec in recommendations:
                 st.markdown(rec)
             
-            # Store results for export
+            # Store enhanced results for export
             st.session_state.calc_results = {
                 'equipment_id': equipment_id or 'Not specified',
                 'equipment_type': equipment_type,
@@ -1188,31 +1279,40 @@ def calculator_page():
                 'validation_status': validation.get('status', 'not_validated'),
                 'validation_message': validation.get('message', 'No validation performed'),
                 'api_reference': validation.get('api_reference', 'Not available'),
-                'recommendations': '\n'.join([rec.replace('• ', '- ') for rec in recommendations])
+                'recommendations': '\n'.join([rec.replace('• ', '- ') for rec in recommendations]),
+                'api_analysis': st.session_state.get('api_analysis', 'No API analysis performed')
             }
             
-            # Export options
+            # Enhanced Export options
             st.markdown("---")
             st.markdown("### 📄 **Export Results**")
             
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("📄 Generate Report", type="primary"):
-                    report_text = export_calculation_results(st.session_state.calc_results)
+                if st.button("📄 Generate Enhanced Report", type="primary"):
+                    # Enhanced report with API analysis
+                    enhanced_report = export_calculation_results(st.session_state.calc_results)
+                    
+                    # Add API analysis to report if available
+                    if st.session_state.get('api_analysis'):
+                        enhanced_report += f"\n\nAPI STANDARDS ANALYSIS:\n{'-' * 50}\n"
+                        enhanced_report += st.session_state.api_analysis
+                    
                     st.download_button(
-                        "📄 Download Report",
-                        report_text,
-                        file_name=f"corrosion_calc_{equipment_id or 'equipment'}_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                        "📄 Download Enhanced Report",
+                        enhanced_report,
+                        file_name=f"enhanced_corrosion_calc_{equipment_id or 'equipment'}_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                         mime="text/plain"
                     )
             
             with col2:
-                # Quick summary export
+                # Quick summary export (existing)
                 summary = f"""Equipment: {equipment_id or 'Not specified'}
 Corrosion Rate: {corrosion_rate:.3f} mm/year
 Remaining Life: {remaining_life:.1f} years if remaining_life is not None else 'N/A'
-Status: {validation.get('status', 'not_validated').title()}"""
+Status: {validation.get('status', 'not_validated').title()}
+API Analysis: {'Included' if st.session_state.get('api_analysis') else 'Not performed'}"""
                 
                 st.download_button(
                     "📋 Quick Summary",
@@ -1222,7 +1322,7 @@ Status: {validation.get('status', 'not_validated').title()}"""
                 )
             
             with col3:
-                # CSV export for data analysis
+                # CSV export (existing)
                 if st.button("📊 CSV Data"):
                     csv_data = f"""Parameter,Value,Unit
 Equipment ID,{equipment_id or 'Not specified'},
@@ -1236,32 +1336,34 @@ Minimum Thickness,{min_thickness},mm
 Corrosion Rate,{corrosion_rate:.3f},mm/year
 Thickness Loss,{thickness_loss:.2f},mm
 Remaining Life,{remaining_life if remaining_life is not None else 'N/A'},years
+API Analysis,{'Available' if st.session_state.get('api_analysis') else 'Not performed'},
 """
                     st.download_button(
                         "📊 Download CSV",
                         csv_data,
-                        file_name=f"corrosion_data_{equipment_id or 'equipment'}.csv",
+                        file_name=f"enhanced_corrosion_data_{equipment_id or 'equipment'}.csv",
                         mime="text/csv"
                     )
     
     else:
-        # Welcome message when no calculations performed
+        # Welcome message (existing)
         if not (initial_thickness and current_thickness and service_years):
             st.markdown("""
-            This tool helps you calculate corrosion rates and predict remaining equipment life based on thickness measurements.
+            This enhanced tool calculates corrosion rates and provides **API-powered recommendations**.
             
             **🎯 What you get:**
             - **Corrosion Rate**: mm/year based on your measurements
             - **Remaining Life**: Years until minimum thickness
             - **API 571 Validation**: Cross-check against industry standards
-            - **Recommendations**: Actionable guidance for your equipment
+            - **📚 API Document Analysis**: Detailed guidance from API 571/970/584
+            - **Enhanced Recommendations**: AI-powered suggestions
             
             **📋 To get started:**
             1. Enter your **thickness measurements** (initial, current, service time)
             2. Optionally specify **equipment details** for better validation
             3. Set **minimum required thickness** for safety assessment
-            4. Review **results and recommendations**
-            5. **Export** your analysis report
+            4. Enable **API Document Analysis** for enhanced recommendations
+            5. **Export** your comprehensive analysis report
             
             **📏 Units**: All calculations use metric units (mm, years)
             
