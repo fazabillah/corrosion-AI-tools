@@ -138,7 +138,7 @@ MODEL_CONFIG = {
         "use_cases": ["simple_queries", "quick_facts", "cached_responses"]
     },
     "versatile": {
-        "name": "llama-3.1-70b-versatile", 
+        "name": "llama-3.3-70b-versatile", 
         "cost_per_token": 0.8,  # Relative cost (versatile = 16x more expensive)
         "speed": "fast",
         "reasoning": "advanced",
@@ -308,7 +308,7 @@ def setup_hybrid_llm():
         )
         
         versatile_llm = ChatGroq(
-            model_name="llama-3.1-70b-versatile", 
+            model_name="llama-3.3-70b-versatile", 
             temperature=0.1,
             streaming=True
         )
