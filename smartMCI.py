@@ -534,11 +534,6 @@ def setup_vectorstores():
         except Exception as e:
             st.error(f"❌ Error connecting to {api_name.upper()}: {e}")
     
-    if vectorstores:
-        st.success(f"✅ Connected to: {', '.join([f'{k.upper()}' for k in vectorstores.keys()])}")
-    else:
-        st.error("❌ No API documents found. Please run ingestion script first.")
-    
     return vectorstores, len(vectorstores) > 0
 
 def is_mci_related(query: str) -> bool:
