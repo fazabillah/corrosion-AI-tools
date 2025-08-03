@@ -1168,9 +1168,9 @@ def chatbot_page():
         - **API 584** - Integrity Operating Windows
 
         **App Features (Refer on Sidebar):**
-        - 📚 **ChatBot**: Conversational AI for MCI engineering questions
-        - 🌐 **Calculator**: Corrosion rate calculations (mm/year), Remaining Life, and API validation
-        - 💬 **Analysis**: Comprehensive damage mechanism assessment
+        - 💬 **ChatBot**: Conversational AI for MCI engineering questions
+        - 🧮 **Calculator**: Corrosion rate calculations (mm/year), Remaining Life, and API validation
+        - 🔬 **Analysis**: Comprehensive damage mechanism assessment
 
         **Try asking:** *"What are the key factors in material selection for offshore platforms?"*
         """)
