@@ -3,6 +3,7 @@ pinecone-client
 langchain-groq
 langchain-huggingface
 langchain-pinecone
+langchain-core>=0.1.0
 python-dotenv
 requests
 pandas
