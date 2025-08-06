@@ -1,42 +1,9 @@
-# Core Streamlit
 streamlit
-
-# LangChain Core (REQUIRED for PromptTemplate)
-langchain-core
-
-# LangChain Components
+pinecone-client  # Use this, NOT 'pinecone'
 langchain-groq
-langchain-pinecone
-
-# Multiple embedding options
 langchain-huggingface
-langchain-community
-langchain-openai
-
-# Vector Database
-pinecone-client
-
-# AI/ML Dependencies for HuggingFace embeddings
-sentence-transformers
-transformers
-torch
-tokenizers
-safetensors
-
-# Alternative: OpenAI (if HuggingFace fails)
-openai
-
-# Core utilities
+langchain-pinecone
 python-dotenv
 requests
-typing-extensions
-
-# Data processing
 pandas
-numpy
-
-# Visualization
 plotly
-
-# Additional dependencies
-pydantic
