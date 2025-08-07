@@ -1,5 +1,5 @@
 streamlit>=1.39.0
-pinecone-client>=5.0.1
+pinecone>=5.0.0
 langchain-groq>=0.2.1
 langchain-community>=0.3.7
 langchain-pinecone>=0.2.11
