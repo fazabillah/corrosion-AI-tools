@@ -2,7 +2,7 @@ streamlit==1.39.0
 pinecone-client==5.0.1
 langchain-groq==0.2.1
 langchain-community==0.3.7
-langchain-pinecone==0.2.0
+langchain-pinecone==0.2.11
 langchain==0.3.7
 langchain-core==0.3.15
 python-dotenv==1.0.1
