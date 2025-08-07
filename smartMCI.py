@@ -6,8 +6,8 @@ import json
 import time
 from datetime import datetime, timedelta
 from langchain_groq import ChatGroq
-from langchain.prompts import PromptTemplate
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.prompts import PromptTemplate
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from pinecone import Pinecone
 from langchain_pinecone import PineconeVectorStore
 from dotenv import load_dotenv
@@ -302,13 +302,13 @@ def setup_hybrid_llm():
     
     try:
         instant_llm = ChatGroq(
-            model_name="llama-3.1-8b-instant",
+            model="llama-3.1-8b-instant",
             temperature=0.1,
             streaming=True
         )
         
         versatile_llm = ChatGroq(
-            model_name="llama-3.3-70b-versatile", 
+            model="llama-3.3-70b-versatile", 
             temperature=0.1,
             streaming=True
         )
@@ -517,7 +517,7 @@ def setup_vectorstores():
     
     for api_name, index_name in API_INDEXES.items():
         try:
-            existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
+            existing_indexes = [index.name for index in pc.list_indexes()]
             if index_name in existing_indexes:
                 index = pc.Index(index_name)
                 stats = index.describe_index_stats()
@@ -698,7 +698,6 @@ def search_web_tavily(query: str, max_results: int = 5, is_mci: bool = True) -> 
     except Exception as e:
         return f"Web search failed: {str(e)}"
 
-# Continuation from Part 1 - complete the assess_content_sufficiency function
 def assess_content_sufficiency(docs: List, query: str) -> Tuple[bool, str]:
     """Assess if retrieved API documents are sufficient to answer the query"""
     
@@ -1686,8 +1685,7 @@ EQUIPMENT PARAMETERS:
             # Cache info
             if st.session_state.get("chat_cache"):
                 st.markdown("---")
-                st.markdown("### 💾 Cache Status")
-                st.caption(f"Stored analyses: {len(st.session_state.chat_cache)}")
+                st.caption(f"💾 Cached analyses: {len(st.session_state.chat_cache)}")
         
         # Display results in main area
         st.markdown("## 📊 Analysis Results")
