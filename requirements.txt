@@ -5,6 +5,7 @@ langchain-community>=0.3.7
 langchain-pinecone>=0.2.11
 langchain>=0.3.7
 langchain-core>=0.3.34
+sentence-transformers>=2.2.2
 python-dotenv>=1.0.1
 requests>=2.32.3
 pandas>=2.2.3
