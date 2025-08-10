@@ -1433,7 +1433,7 @@ Remaining Life,{remaining_life if remaining_life is not None else 'N/A'},years
 # Hybrid chatbot page
 def chatbot_page():
     """Updated chatbot page with hybrid LLM and follow-up questions"""
-    st.title("🛡️ SmartMCI ChatBot")
+    st.title("🛡️ MCI AI-Assitance")
     st.markdown("**MCI Engineering Consultant**")
     
     # Initialize session state for chatbot
