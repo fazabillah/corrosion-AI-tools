@@ -1564,13 +1564,15 @@ def chatbot_page():
                         col1, col2, col3 = st.columns(3)
                         for j, question in enumerate(followup_questions[:3]):
                             with [col1, col2, col3][j]:
+                                button_key = f"example_followup_{j}_{hash(question)}"
                                 if st.button(
                                     question[:80] + "..." if len(question) > 80 else question,
-                                    key=f"example_followup_{j}_{hash(question)}",
+                                    key=button_key,
                                     help=question,
                                     use_container_width=True
                                 ):
-                                    st.session_state.chat_messages.append({"role": "user", "content": question})
+                                    # Store the selected question in session state for processing
+                                    st.session_state.selected_followup = question
                                     st.rerun()
                 except Exception as e:
                     pass  # Silently continue if follow-up generation fails
@@ -1586,16 +1588,20 @@ def chatbot_page():
                     del st.session_state.processing_example
     
     # Check if we need to auto-respond to a follow-up question
-    if (len(st.session_state.chat_messages) > 0 and 
-        st.session_state.chat_messages[-1]["role"] == "user" and
-        not st.session_state.get("processing_prompt") and
-        not st.session_state.get("pending_example")):
+    if st.session_state.get("selected_followup"):
+        # Process the selected follow-up question
+        selected_question = st.session_state.selected_followup
+        del st.session_state.selected_followup  # Clear the flag
         
-        # This means a follow-up question was just added, auto-generate response
-        latest_prompt = st.session_state.chat_messages[-1]["content"]
+        # Add user message to chat history
+        st.session_state.chat_messages.append({"role": "user", "content": selected_question})
+        
+        # Display user message
+        with st.chat_message("user"):
+            st.markdown(selected_question)
         
         # Check cache first
-        cached_response = cache.get(latest_prompt)
+        cached_response = cache.get(selected_question)
         if cached_response:
             response = cached_response + "\n\n*[Cached response]*"
             with st.chat_message("assistant"):
@@ -1603,7 +1609,7 @@ def chatbot_page():
                 
                 # Generate and show follow-up questions for cached responses
                 try:
-                    followup_questions = generate_followup_questions(latest_prompt, response)
+                    followup_questions = generate_followup_questions(selected_question, response)
                     if followup_questions:
                         st.markdown("---")
                         st.markdown("**🔍 Technical Follow-up Questions:**")
@@ -1611,13 +1617,14 @@ def chatbot_page():
                         col1, col2, col3 = st.columns(3)
                         for j, question in enumerate(followup_questions[:3]):
                             with [col1, col2, col3][j]:
+                                button_key = f"auto_cached_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}"
                                 if st.button(
                                     question[:80] + "..." if len(question) > 80 else question,
-                                    key=f"auto_cached_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}",
+                                    key=button_key,
                                     help=question,
                                     use_container_width=True
                                 ):
-                                    st.session_state.chat_messages.append({"role": "user", "content": question})
+                                    st.session_state.selected_followup = question
                                     st.rerun()
                 except Exception as e:
                     pass
@@ -1630,7 +1637,7 @@ def chatbot_page():
                 full_response = ""
                 
                 try:
-                    for chunk in generate_response_stream_hybrid(latest_prompt, vectorstores, st.session_state.chat_messages[:-1]):
+                    for chunk in generate_response_stream_hybrid(selected_question, vectorstores, st.session_state.chat_messages[:-1]):
                         full_response += chunk
                         message_placeholder.markdown(full_response + "▌")
                     
@@ -1638,12 +1645,12 @@ def chatbot_page():
                     
                     # Cache and store the response
                     clean_response = full_response.replace("\n\n*📡 Enhanced with web search*", "")
-                    cache.set(latest_prompt, clean_response)
+                    cache.set(selected_question, clean_response)
                     st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
                     
                     # Generate and show follow-up questions immediately after streaming
                     try:
-                        followup_questions = generate_followup_questions(latest_prompt, full_response)
+                        followup_questions = generate_followup_questions(selected_question, full_response)
                         if followup_questions:
                             st.markdown("---")
                             st.markdown("**🔍 Technical Follow-up Questions:**")
@@ -1651,13 +1658,14 @@ def chatbot_page():
                             col1, col2, col3 = st.columns(3)
                             for j, question in enumerate(followup_questions[:3]):
                                 with [col1, col2, col3][j]:
+                                    button_key = f"auto_stream_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}"
                                     if st.button(
                                         question[:80] + "..." if len(question) > 80 else question,
-                                        key=f"auto_stream_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}",
+                                        key=button_key,
                                         help=question,
                                         use_container_width=True
                                     ):
-                                        st.session_state.chat_messages.append({"role": "user", "content": question})
+                                        st.session_state.selected_followup = question
                                         st.rerun()
                     except Exception as e:
                         pass
@@ -1697,13 +1705,14 @@ def chatbot_page():
                         col1, col2, col3 = st.columns(3)
                         for j, question in enumerate(followup_questions[:3]):
                             with [col1, col2, col3][j]:
+                                button_key = f"cached_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}"
                                 if st.button(
                                     question[:80] + "..." if len(question) > 80 else question,
-                                    key=f"cached_followup_{j}_{hash(question)}",
+                                    key=button_key,
                                     help=question,
                                     use_container_width=True
                                 ):
-                                    st.session_state.chat_messages.append({"role": "user", "content": question})
+                                    st.session_state.selected_followup = question
                                     st.rerun()
                 except Exception as e:
                     pass  # Silently continue if follow-up generation fails
@@ -1740,13 +1749,14 @@ def chatbot_page():
                             col1, col2, col3 = st.columns(3)
                             for j, question in enumerate(followup_questions[:3]):
                                 with [col1, col2, col3][j]:
+                                    button_key = f"stream_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}"
                                     if st.button(
                                         question[:80] + "..." if len(question) > 80 else question,
-                                        key=f"stream_followup_{j}_{hash(question)}",
+                                        key=button_key,
                                         help=question,
                                         use_container_width=True
                                     ):
-                                        st.session_state.chat_messages.append({"role": "user", "content": question})
+                                        st.session_state.selected_followup = question
                                         st.rerun()
                     except Exception as e:
                         pass  # Silently continue if follow-up generation fails
