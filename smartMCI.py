@@ -1585,6 +1585,88 @@ def chatbot_page():
                 if "processing_example" in st.session_state:
                     del st.session_state.processing_example
     
+    # Check if we need to auto-respond to a follow-up question
+    if (len(st.session_state.chat_messages) > 0 and 
+        st.session_state.chat_messages[-1]["role"] == "user" and
+        not st.session_state.get("processing_prompt") and
+        not st.session_state.get("pending_example")):
+        
+        # This means a follow-up question was just added, auto-generate response
+        latest_prompt = st.session_state.chat_messages[-1]["content"]
+        
+        # Check cache first
+        cached_response = cache.get(latest_prompt)
+        if cached_response:
+            response = cached_response + "\n\n*[Cached response]*"
+            with st.chat_message("assistant"):
+                st.markdown(response)
+                
+                # Generate and show follow-up questions for cached responses
+                try:
+                    followup_questions = generate_followup_questions(latest_prompt, response)
+                    if followup_questions:
+                        st.markdown("---")
+                        st.markdown("**🔍 Technical Follow-up Questions:**")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        for j, question in enumerate(followup_questions[:3]):
+                            with [col1, col2, col3][j]:
+                                if st.button(
+                                    question[:80] + "..." if len(question) > 80 else question,
+                                    key=f"auto_cached_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}",
+                                    help=question,
+                                    use_container_width=True
+                                ):
+                                    st.session_state.chat_messages.append({"role": "user", "content": question})
+                                    st.rerun()
+                except Exception as e:
+                    pass
+                    
+            st.session_state.chat_messages.append({"role": "assistant", "content": response})
+        else:
+            # Generate streaming response automatically
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                full_response = ""
+                
+                try:
+                    for chunk in generate_response_stream_hybrid(latest_prompt, vectorstores, st.session_state.chat_messages[:-1]):
+                        full_response += chunk
+                        message_placeholder.markdown(full_response + "▌")
+                    
+                    message_placeholder.markdown(full_response)
+                    
+                    # Cache and store the response
+                    clean_response = full_response.replace("\n\n*📡 Enhanced with web search*", "")
+                    cache.set(latest_prompt, clean_response)
+                    st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
+                    
+                    # Generate and show follow-up questions immediately after streaming
+                    try:
+                        followup_questions = generate_followup_questions(latest_prompt, full_response)
+                        if followup_questions:
+                            st.markdown("---")
+                            st.markdown("**🔍 Technical Follow-up Questions:**")
+                            
+                            col1, col2, col3 = st.columns(3)
+                            for j, question in enumerate(followup_questions[:3]):
+                                with [col1, col2, col3][j]:
+                                    if st.button(
+                                        question[:80] + "..." if len(question) > 80 else question,
+                                        key=f"auto_stream_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}",
+                                        help=question,
+                                        use_container_width=True
+                                    ):
+                                        st.session_state.chat_messages.append({"role": "user", "content": question})
+                                        st.rerun()
+                    except Exception as e:
+                        pass
+                    
+                except Exception as e:
+                    error_msg = f"❌ Error generating response: {str(e)}"
+                    message_placeholder.markdown(error_msg)
+                    st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
+
     # Chat input with hybrid streaming
     if prompt := st.chat_input("Ask about materials, corrosion, integrity, or engineering..."):
         # Check if we're already processing this prompt
