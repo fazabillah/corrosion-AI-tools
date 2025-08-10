@@ -1513,7 +1513,7 @@ def chatbot_page():
                 
                 if followup_questions:
                     st.markdown("---")
-                    st.markdown("**🔍 Technical Follow-up Questions:**")
+                    st.markdown("**🔍 Related Questions:**")
                     
                     col1, col2, col3 = st.columns(3)
                     
