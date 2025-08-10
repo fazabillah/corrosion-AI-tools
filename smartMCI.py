@@ -1554,6 +1554,27 @@ def chatbot_page():
                 cache.set(example, clean_response)
                 st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
                 
+                # Generate and show follow-up questions immediately after streaming
+                try:
+                    followup_questions = generate_followup_questions(example, full_response)
+                    if followup_questions:
+                        st.markdown("---")
+                        st.markdown("**🔍 Technical Follow-up Questions:**")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        for j, question in enumerate(followup_questions[:3]):
+                            with [col1, col2, col3][j]:
+                                if st.button(
+                                    question[:80] + "..." if len(question) > 80 else question,
+                                    key=f"example_followup_{j}_{hash(question)}",
+                                    help=question,
+                                    use_container_width=True
+                                ):
+                                    st.session_state.chat_messages.append({"role": "user", "content": question})
+                                    st.rerun()
+                except Exception as e:
+                    pass  # Silently continue if follow-up generation fails
+                
             except Exception as e:
                 error_msg = f"❌ Error generating response: {str(e)}"
                 message_placeholder.markdown(error_msg)
@@ -1583,6 +1604,28 @@ def chatbot_page():
             response = cached_response + "\n\n*[Cached response]*"
             with st.chat_message("assistant"):
                 st.markdown(response)
+                
+                # Generate and show follow-up questions for cached responses
+                try:
+                    followup_questions = generate_followup_questions(prompt, response)
+                    if followup_questions:
+                        st.markdown("---")
+                        st.markdown("**🔍 Technical Follow-up Questions:**")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        for j, question in enumerate(followup_questions[:3]):
+                            with [col1, col2, col3][j]:
+                                if st.button(
+                                    question[:80] + "..." if len(question) > 80 else question,
+                                    key=f"cached_followup_{j}_{hash(question)}",
+                                    help=question,
+                                    use_container_width=True
+                                ):
+                                    st.session_state.chat_messages.append({"role": "user", "content": question})
+                                    st.rerun()
+                except Exception as e:
+                    pass  # Silently continue if follow-up generation fails
+                    
             st.session_state.chat_messages.append({"role": "assistant", "content": response})
         else:
             # Mark as processing
@@ -1604,6 +1647,27 @@ def chatbot_page():
                     clean_response = full_response.replace("\n\n*📡 Enhanced with web search*", "")
                     cache.set(prompt, clean_response)
                     st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
+                    
+                    # Generate and show follow-up questions immediately after streaming
+                    try:
+                        followup_questions = generate_followup_questions(prompt, full_response)
+                        if followup_questions:
+                            st.markdown("---")
+                            st.markdown("**🔍 Technical Follow-up Questions:**")
+                            
+                            col1, col2, col3 = st.columns(3)
+                            for j, question in enumerate(followup_questions[:3]):
+                                with [col1, col2, col3][j]:
+                                    if st.button(
+                                        question[:80] + "..." if len(question) > 80 else question,
+                                        key=f"stream_followup_{j}_{hash(question)}",
+                                        help=question,
+                                        use_container_width=True
+                                    ):
+                                        st.session_state.chat_messages.append({"role": "user", "content": question})
+                                        st.rerun()
+                    except Exception as e:
+                        pass  # Silently continue if follow-up generation fails
                     
                 except Exception as e:
                     error_msg = f"❌ Error generating response: {str(e)}"
