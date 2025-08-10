@@ -1554,6 +1554,7 @@ def chatbot_page():
                 cache.set(example, clean_response)
                 st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
                 
+<<<<<<< HEAD
                 # Generate and show follow-up questions immediately after streaming
                 try:
                     followup_questions = generate_followup_questions(example, full_response)
@@ -1577,6 +1578,8 @@ def chatbot_page():
                 except Exception as e:
                     pass  # Silently continue if follow-up generation fails
                 
+=======
+>>>>>>> parent of 6a1d3d7 (Update smartMCI.py)
             except Exception as e:
                 error_msg = f"❌ Error generating response: {str(e)}"
                 message_placeholder.markdown(error_msg)
@@ -1694,6 +1697,7 @@ def chatbot_page():
             response = cached_response + "\n\n*[Cached response]*"
             with st.chat_message("assistant"):
                 st.markdown(response)
+<<<<<<< HEAD
                 
                 # Generate and show follow-up questions for cached responses
                 try:
@@ -1717,6 +1721,8 @@ def chatbot_page():
                 except Exception as e:
                     pass  # Silently continue if follow-up generation fails
                     
+=======
+>>>>>>> parent of 6a1d3d7 (Update smartMCI.py)
             st.session_state.chat_messages.append({"role": "assistant", "content": response})
         else:
             # Mark as processing
@@ -1739,6 +1745,7 @@ def chatbot_page():
                     cache.set(prompt, clean_response)
                     st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
                     
+<<<<<<< HEAD
                     # Generate and show follow-up questions immediately after streaming
                     try:
                         followup_questions = generate_followup_questions(prompt, full_response)
@@ -1761,6 +1768,8 @@ def chatbot_page():
                     except Exception as e:
                         pass  # Silently continue if follow-up generation fails
                     
+=======
+>>>>>>> parent of 6a1d3d7 (Update smartMCI.py)
                 except Exception as e:
                     error_msg = f"❌ Error generating response: {str(e)}"
                     message_placeholder.markdown(error_msg)
