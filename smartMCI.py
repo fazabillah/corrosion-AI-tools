@@ -750,174 +750,6 @@ def create_polite_redirect(query: str) -> str:
 
 I'm here to help make your engineering projects safer and more reliable! 🚀"""
 
-def generate_followup_questions(user_query: str, assistant_response: str) -> List[str]:
-    """
-    Generate technical follow-up questions based on the conversation context
-    to guide users toward more in-depth engineering analysis
-    """
-    
-    query_lower = user_query.lower()
-    response_lower = assistant_response.lower()
-    followup_questions = []
-    
-    # Corrosion-related follow-ups
-    if any(term in query_lower for term in ['corrosion', 'pitting', 'crevice', 'general corrosion']):
-        if 'material' in response_lower and 'environment' in response_lower:
-            followup_questions.extend([
-                "What are the critical operating parameters (temperature, pressure, pH) that could accelerate this corrosion mechanism?",
-                "How would you calculate the expected corrosion rate for these specific conditions?",
-                "What inspection techniques would be most effective for detecting this type of corrosion?"
-            ])
-        else:
-            followup_questions.extend([
-                "What specific materials would you recommend for this corrosive environment?",
-                "How do temperature and chloride concentration affect the corrosion kinetics?",
-                "What mitigation strategies beyond material selection should be considered?"
-            ])
-    
-    # Stress corrosion cracking follow-ups
-    if any(term in query_lower for term in ['stress corrosion', 'scc', 'cracking']):
-        followup_questions.extend([
-            "What stress levels and environmental conditions create the threshold for SCC initiation?",
-            "How would you design a monitoring program to detect early-stage cracking?",
-            "What residual stress mitigation techniques would be most effective for this application?"
-        ])
-    
-    # Material selection follow-ups
-    if any(term in query_lower for term in ['material selection', 'alloy', 'steel', 'stainless']):
-        if 'temperature' in response_lower or 'pressure' in response_lower:
-            followup_questions.extend([
-                "What are the mechanical property requirements at the operating temperature?",
-                "How would thermal cycling affect material performance and life expectancy?",
-                "What welding procedures and heat treatment would be required for this material?"
-            ])
-        else:
-            followup_questions.extend([
-                "What are the specific PREN (Pitting Resistance Equivalent Number) requirements for this service?",
-                "How would you verify material compliance through testing protocols?",
-                "What backup material options should be considered if primary selection fails?"
-            ])
-    
-    # High temperature follow-ups
-    if any(term in query_lower for term in ['high temperature', 'thermal', 'heat']):
-        followup_questions.extend([
-            "What creep-rupture data should be evaluated for long-term service reliability?",
-            "How would you calculate the remaining life based on time-temperature parameters?",
-            "What high-temperature inspection methods would detect degradation mechanisms?"
-        ])
-    
-    # Marine/offshore follow-ups
-    if any(term in query_lower for term in ['marine', 'offshore', 'seawater', 'chloride']):
-        followup_questions.extend([
-            "What cathodic protection current density would be required for this geometry?",
-            "How would you design the coating system specification for this marine environment?",
-            "What specific API RP 14E requirements apply to this offshore application?"
-        ])
-    
-    # Sour service follow-ups
-    if any(term in query_lower for term in ['sour', 'h2s', 'hydrogen sulfide', 'nace']):
-        followup_questions.extend([
-            "What H2S partial pressure limits apply according to NACE MR0175/ISO 15156?",
-            "How would you qualify welding procedures for sour service applications?",
-            "What hydrogen charging test requirements should be specified for material validation?"
-        ])
-    
-    # Equipment-specific follow-ups
-    if any(term in query_lower for term in ['pressure vessel', 'piping', 'heat exchanger']):
-        followup_questions.extend([
-            "What fitness-for-service assessment approach would you use per API 579?",
-            "How would you establish inspection intervals based on damage mechanism rates?",
-            "What operating limit adjustments would maintain integrity throughout service life?"
-        ])
-    
-    # Welding follow-ups
-    if any(term in query_lower for term in ['welding', 'weld', 'heat affected zone', 'haz']):
-        followup_questions.extend([
-            "What preheat and PWHT requirements apply for this material and thickness combination?",
-            "How would you prevent hydrogen-induced cracking during welding operations?",
-            "What NDE requirements would ensure weld integrity for this service?"
-        ])
-    
-    # Inspection and monitoring follow-ups
-    if any(term in query_lower for term in ['inspection', 'monitoring', 'ndt', 'testing']):
-        followup_questions.extend([
-            "What inspection frequency would be appropriate based on the calculated corrosion rate?",
-            "How would you establish statistically valid inspection locations for this damage mechanism?",
-            "What online monitoring systems could provide real-time integrity assessment?"
-        ])
-    
-    # Process safety follow-ups
-    if any(term in query_lower for term in ['safety', 'hazard', 'risk', 'failure']):
-        followup_questions.extend([
-            "What would be the consequences of failure and how does this impact inspection strategy?",
-            "How would you conduct a quantitative risk assessment for this degradation mechanism?",
-            "What emergency response procedures should be in place for this failure mode?"
-        ])
-    
-    # API standards follow-ups
-    if any(term in query_lower for term in ['api 571', 'api 970', 'api 584']):
-        if 'api 571' in query_lower:
-            followup_questions.extend([
-                "What environmental conditions would shift this damage mechanism to a higher severity category?",
-                "How would you apply the damage mechanism matrix to establish inspection requirements?",
-                "What material property changes occur as this damage mechanism progresses?"
-            ])
-        elif 'api 970' in query_lower:
-            followup_questions.extend([
-                "What corrosion monitoring program would verify the effectiveness of these control measures?",
-                "How would you optimize chemical inhibitor dosing for these specific conditions?",
-                "What backup corrosion control methods should be considered?"
-            ])
-        elif 'api 584' in query_lower:
-            followup_questions.extend([
-                "How would you establish safe operating limits based on damage mechanism kinetics?",
-                "What process upset scenarios could exceed the integrity operating window?",
-                "How frequently should operating limits be reassessed based on inspection data?"
-            ])
-    
-    # Design and engineering follow-ups
-    if any(term in query_lower for term in ['design', 'specification', 'standard']):
-        followup_questions.extend([
-            "What design margins should be applied for this damage mechanism and operating severity?",
-            "How would you incorporate lessons learned from similar applications in the industry?",
-            "What future operating condition changes should be considered in the design?"
-        ])
-    
-    # Mitigation and prevention follow-ups
-    if any(term in query_lower for term in ['mitigation', 'prevention', 'protection']):
-        followup_questions.extend([
-            "What is the economic trade-off between prevention cost and expected damage cost?",
-            "How would you validate the effectiveness of these mitigation measures in service?",
-            "What contingency plans should be in place if primary mitigation fails?"
-        ])
-    
-    # If response contains calculations or rates
-    if any(term in response_lower for term in ['rate', 'calculation', 'mm/year', 'years']):
-        followup_questions.extend([
-            "How would you validate these calculated rates against field inspection data?",
-            "What safety factors should be applied to these calculations for critical equipment?",
-            "How would process condition changes affect these calculated rates?"
-        ])
-    
-    # General technical depth follow-ups if no specific matches
-    if not followup_questions:
-        if len(assistant_response) > 500:  # Detailed response
-            followup_questions.extend([
-                "What specific technical parameters would you need to quantify for a detailed engineering assessment?",
-                "How would you verify these recommendations through testing or field experience?",
-                "What are the critical success factors for implementing these recommendations?"
-            ])
-        else:  # Shorter response
-            followup_questions.extend([
-                "What additional technical details would help optimize this for your specific application?",
-                "How would you quantify the engineering requirements for this scenario?",
-                "What are the next steps for a detailed technical evaluation?"
-            ])
-    
-    # Remove duplicates and limit to 3 most relevant questions
-    unique_questions = list(dict.fromkeys(followup_questions))
-    return unique_questions[:3]
-
 def create_hybrid_chat_prompt():
     """Create prompt template optimized for MCI focus"""
     return PromptTemplate(
@@ -1432,7 +1264,7 @@ Remaining Life,{remaining_life if remaining_life is not None else 'N/A'},years
 
 # Hybrid chatbot page
 def chatbot_page():
-    """Updated chatbot page with hybrid LLM and follow-up questions"""
+    """Updated chatbot page with hybrid LLM"""
     st.title("🛡️ SmartMCI ChatBot")
     st.markdown("**MCI Engineering Consultant**")
     
@@ -1496,39 +1328,10 @@ def chatbot_page():
             st.markdown("---")
             st.caption(f"💾 Cached responses: {len(st.session_state.chat_cache)}")
     
-    # Display chat history with follow-up questions
-    for i, message in enumerate(st.session_state.chat_messages):
+    # Display chat history
+    for message in st.session_state.chat_messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-        
-        # Add follow-up questions after each assistant response
-        if message["role"] == "assistant" and i > 0:
-            # Get the user query that prompted this response
-            user_query = st.session_state.chat_messages[i-1]["content"] if i > 0 else ""
-            assistant_response = message["content"]
-            
-            # Generate follow-up questions
-            try:
-                followup_questions = generate_followup_questions(user_query, assistant_response)
-                
-                if followup_questions:
-                    st.markdown("---")
-                    st.markdown("**🔍 Technical Follow-up Questions:**")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    
-                    for j, question in enumerate(followup_questions[:3]):
-                        with [col1, col2, col3][j]:
-                            if st.button(
-                                question[:80] + "..." if len(question) > 80 else question,
-                                key=f"followup_{i}_{j}_{hash(question)}",
-                                help=question,
-                                use_container_width=True
-                            ):
-                                st.session_state.chat_messages.append({"role": "user", "content": question})
-                                st.rerun()
-            except Exception as e:
-                st.write(f"Debug: Error generating follow-ups: {e}")
     
     # Handle pending example streaming
     if st.session_state.get("pending_example"):
@@ -1554,32 +1357,6 @@ def chatbot_page():
                 cache.set(example, clean_response)
                 st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
                 
-<<<<<<< HEAD
-                # Generate and show follow-up questions immediately after streaming
-                try:
-                    followup_questions = generate_followup_questions(example, full_response)
-                    if followup_questions:
-                        st.markdown("---")
-                        st.markdown("**🔍 Technical Follow-up Questions:**")
-                        
-                        col1, col2, col3 = st.columns(3)
-                        for j, question in enumerate(followup_questions[:3]):
-                            with [col1, col2, col3][j]:
-                                button_key = f"example_followup_{j}_{hash(question)}"
-                                if st.button(
-                                    question[:80] + "..." if len(question) > 80 else question,
-                                    key=button_key,
-                                    help=question,
-                                    use_container_width=True
-                                ):
-                                    # Store the selected question in session state for processing
-                                    st.session_state.selected_followup = question
-                                    st.rerun()
-                except Exception as e:
-                    pass  # Silently continue if follow-up generation fails
-                
-=======
->>>>>>> parent of 6a1d3d7 (Update smartMCI.py)
             except Exception as e:
                 error_msg = f"❌ Error generating response: {str(e)}"
                 message_placeholder.markdown(error_msg)
@@ -1590,94 +1367,6 @@ def chatbot_page():
                 if "processing_example" in st.session_state:
                     del st.session_state.processing_example
     
-    # Check if we need to auto-respond to a follow-up question
-    if st.session_state.get("selected_followup"):
-        # Process the selected follow-up question
-        selected_question = st.session_state.selected_followup
-        del st.session_state.selected_followup  # Clear the flag
-        
-        # Add user message to chat history
-        st.session_state.chat_messages.append({"role": "user", "content": selected_question})
-        
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(selected_question)
-        
-        # Check cache first
-        cached_response = cache.get(selected_question)
-        if cached_response:
-            response = cached_response + "\n\n*[Cached response]*"
-            with st.chat_message("assistant"):
-                st.markdown(response)
-                
-                # Generate and show follow-up questions for cached responses
-                try:
-                    followup_questions = generate_followup_questions(selected_question, response)
-                    if followup_questions:
-                        st.markdown("---")
-                        st.markdown("**🔍 Technical Follow-up Questions:**")
-                        
-                        col1, col2, col3 = st.columns(3)
-                        for j, question in enumerate(followup_questions[:3]):
-                            with [col1, col2, col3][j]:
-                                button_key = f"auto_cached_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}"
-                                if st.button(
-                                    question[:80] + "..." if len(question) > 80 else question,
-                                    key=button_key,
-                                    help=question,
-                                    use_container_width=True
-                                ):
-                                    st.session_state.selected_followup = question
-                                    st.rerun()
-                except Exception as e:
-                    pass
-                    
-            st.session_state.chat_messages.append({"role": "assistant", "content": response})
-        else:
-            # Generate streaming response automatically
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                full_response = ""
-                
-                try:
-                    for chunk in generate_response_stream_hybrid(selected_question, vectorstores, st.session_state.chat_messages[:-1]):
-                        full_response += chunk
-                        message_placeholder.markdown(full_response + "▌")
-                    
-                    message_placeholder.markdown(full_response)
-                    
-                    # Cache and store the response
-                    clean_response = full_response.replace("\n\n*📡 Enhanced with web search*", "")
-                    cache.set(selected_question, clean_response)
-                    st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
-                    
-                    # Generate and show follow-up questions immediately after streaming
-                    try:
-                        followup_questions = generate_followup_questions(selected_question, full_response)
-                        if followup_questions:
-                            st.markdown("---")
-                            st.markdown("**🔍 Technical Follow-up Questions:**")
-                            
-                            col1, col2, col3 = st.columns(3)
-                            for j, question in enumerate(followup_questions[:3]):
-                                with [col1, col2, col3][j]:
-                                    button_key = f"auto_stream_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}"
-                                    if st.button(
-                                        question[:80] + "..." if len(question) > 80 else question,
-                                        key=button_key,
-                                        help=question,
-                                        use_container_width=True
-                                    ):
-                                        st.session_state.selected_followup = question
-                                        st.rerun()
-                    except Exception as e:
-                        pass
-                    
-                except Exception as e:
-                    error_msg = f"❌ Error generating response: {str(e)}"
-                    message_placeholder.markdown(error_msg)
-                    st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
-
     # Chat input with hybrid streaming
     if prompt := st.chat_input("Ask about materials, corrosion, integrity, or engineering..."):
         # Check if we're already processing this prompt
@@ -1697,32 +1386,6 @@ def chatbot_page():
             response = cached_response + "\n\n*[Cached response]*"
             with st.chat_message("assistant"):
                 st.markdown(response)
-<<<<<<< HEAD
-                
-                # Generate and show follow-up questions for cached responses
-                try:
-                    followup_questions = generate_followup_questions(prompt, response)
-                    if followup_questions:
-                        st.markdown("---")
-                        st.markdown("**🔍 Technical Follow-up Questions:**")
-                        
-                        col1, col2, col3 = st.columns(3)
-                        for j, question in enumerate(followup_questions[:3]):
-                            with [col1, col2, col3][j]:
-                                button_key = f"cached_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}"
-                                if st.button(
-                                    question[:80] + "..." if len(question) > 80 else question,
-                                    key=button_key,
-                                    help=question,
-                                    use_container_width=True
-                                ):
-                                    st.session_state.selected_followup = question
-                                    st.rerun()
-                except Exception as e:
-                    pass  # Silently continue if follow-up generation fails
-                    
-=======
->>>>>>> parent of 6a1d3d7 (Update smartMCI.py)
             st.session_state.chat_messages.append({"role": "assistant", "content": response})
         else:
             # Mark as processing
@@ -1745,31 +1408,6 @@ def chatbot_page():
                     cache.set(prompt, clean_response)
                     st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
                     
-<<<<<<< HEAD
-                    # Generate and show follow-up questions immediately after streaming
-                    try:
-                        followup_questions = generate_followup_questions(prompt, full_response)
-                        if followup_questions:
-                            st.markdown("---")
-                            st.markdown("**🔍 Technical Follow-up Questions:**")
-                            
-                            col1, col2, col3 = st.columns(3)
-                            for j, question in enumerate(followup_questions[:3]):
-                                with [col1, col2, col3][j]:
-                                    button_key = f"stream_followup_{j}_{hash(question)}_{len(st.session_state.chat_messages)}"
-                                    if st.button(
-                                        question[:80] + "..." if len(question) > 80 else question,
-                                        key=button_key,
-                                        help=question,
-                                        use_container_width=True
-                                    ):
-                                        st.session_state.selected_followup = question
-                                        st.rerun()
-                    except Exception as e:
-                        pass  # Silently continue if follow-up generation fails
-                    
-=======
->>>>>>> parent of 6a1d3d7 (Update smartMCI.py)
                 except Exception as e:
                     error_msg = f"❌ Error generating response: {str(e)}"
                     message_placeholder.markdown(error_msg)
