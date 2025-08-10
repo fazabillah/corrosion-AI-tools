@@ -1496,37 +1496,39 @@ def chatbot_page():
             st.markdown("---")
             st.caption(f"💾 Cached responses: {len(st.session_state.chat_cache)}")
     
-    # Display chat history
+    # Display chat history with follow-up questions
     for i, message in enumerate(st.session_state.chat_messages):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+        
+        # Add follow-up questions after each assistant response
+        if message["role"] == "assistant" and i > 0:
+            # Get the user query that prompted this response
+            user_query = st.session_state.chat_messages[i-1]["content"] if i > 0 else ""
+            assistant_response = message["content"]
             
-            # Add follow-up questions after assistant responses
-            if message["role"] == "assistant" and i == len(st.session_state.chat_messages) - 1:
-                # Only show follow-up for the most recent assistant message
-                if len(st.session_state.chat_messages) >= 2:
-                    # Get the user query that prompted this response
-                    user_query = st.session_state.chat_messages[i-1]["content"]
-                    assistant_response = message["content"]
+            # Generate follow-up questions
+            try:
+                followup_questions = generate_followup_questions(user_query, assistant_response)
+                
+                if followup_questions:
+                    st.markdown("---")
+                    st.markdown("**🔍 Technical Follow-up Questions:**")
                     
-                    # Generate follow-up questions
-                    followup_questions = generate_followup_questions(user_query, assistant_response)
+                    col1, col2, col3 = st.columns(3)
                     
-                    if followup_questions:
-                        st.markdown("---")
-                        st.markdown("**🔍 Dive Deeper - Technical Follow-up Questions:**")
-                        
-                        # Create columns for follow-up questions
-                        for j, question in enumerate(followup_questions):
+                    for j, question in enumerate(followup_questions[:3]):
+                        with [col1, col2, col3][j]:
                             if st.button(
-                                question, 
-                                key=f"followup_{i}_{j}",
-                                help="Click to explore this technical aspect in detail",
+                                question[:80] + "..." if len(question) > 80 else question,
+                                key=f"followup_{i}_{j}_{hash(question)}",
+                                help=question,
                                 use_container_width=True
                             ):
-                                # Add the follow-up question as a new user message
                                 st.session_state.chat_messages.append({"role": "user", "content": question})
                                 st.rerun()
+            except Exception as e:
+                st.write(f"Debug: Error generating follow-ups: {e}")
     
     # Handle pending example streaming
     if st.session_state.get("pending_example"):
