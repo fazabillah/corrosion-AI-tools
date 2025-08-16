@@ -153,7 +153,7 @@ class ValidationResult(BaseModel):
     api_reference: str
 
 class ChatMessage(BaseModel):
-    role: str = Field(..., regex="^(user|assistant)$")
+    role: str = Field(..., pattern="^(user|assistant)$")
     content: str = Field(..., min_length=1, max_length=10000)
     timestamp: datetime = Field(default_factory=datetime.now)
 
