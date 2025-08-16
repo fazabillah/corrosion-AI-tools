@@ -16,7 +16,7 @@ import requests
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-from pydantic import BaseModel, Field, validator, ValidationError
+from pydantic import BaseModel, Field, field_validator, ValidationError
 from enum import Enum
 
 # Load environment variables
@@ -113,7 +113,8 @@ class EquipmentContext(BaseModel):
     temperature: Optional[float] = Field(None, ge=-50, le=1000, description="Temperature in Celsius")
     pressure: Optional[float] = Field(None, ge=0, le=500, description="Pressure in bar")
 
-    @validator('temperature')
+    @field_validator('temperature')
+    @classmethod
     def validate_temperature(cls, v):
         if v is not None and (v < -273.15):  # Absolute zero check
             raise ValueError('Temperature cannot be below absolute zero')
@@ -129,15 +130,17 @@ class CalculatorInput(BaseModel):
     material: CalcMaterial = CalcMaterial.NOT_SPECIFIED
     environment: CalcEnvironment = CalcEnvironment.NOT_SPECIFIED
 
-    @validator('current_thickness')
-    def validate_current_thickness(cls, v, values):
-        if 'initial_thickness' in values and v > values['initial_thickness']:
+    @field_validator('current_thickness')
+    @classmethod
+    def validate_current_thickness(cls, v, info):
+        if 'initial_thickness' in info.data and v > info.data['initial_thickness']:
             raise ValueError('Current thickness cannot exceed initial thickness')
         return v
 
-    @validator('min_thickness')
-    def validate_min_thickness(cls, v, values):
-        if 'current_thickness' in values and v > values['current_thickness']:
+    @field_validator('min_thickness')
+    @classmethod
+    def validate_min_thickness(cls, v, info):
+        if 'current_thickness' in info.data and v > info.data['current_thickness']:
             raise ValueError('Minimum thickness should not exceed current thickness')
         return v
 
@@ -172,10 +175,12 @@ class APIConfig(BaseModel):
     pinecone_api_key: Optional[str] = Field(None, description="Pinecone API key")
     tavily_api_key: Optional[str] = Field(None, description="Tavily API key")
 
-    @validator('groq_api_key', 'pinecone_api_key')
-    def validate_required_keys(cls, v, field):
+    @field_validator('groq_api_key', 'pinecone_api_key')
+    @classmethod
+    def validate_required_keys(cls, v, info):
         if not v:
-            raise ValueError(f'{field.name} is required')
+            field_name = info.field_name
+            raise ValueError(f'{field_name} is required')
         return v
 
 # Configuration data for analysis page
