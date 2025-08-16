@@ -16,6 +16,8 @@ import requests
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
+from pydantic import BaseModel, Field, validator, ValidationError
+from enum import Enum
 
 # Load environment variables
 load_dotenv(override=True)
@@ -27,45 +29,171 @@ st.set_page_config(
     page_icon="🛡️"
 )
 
+# Pydantic Enums for better type safety
+class EquipmentType(str, Enum):
+    NOT_SPECIFIED = "Not Specified"
+    PRESSURE_VESSELS = "Pressure Vessels"
+    PIPING_SYSTEMS = "Piping Systems"
+    HEAT_EXCHANGERS = "Heat Exchangers"
+    STORAGE_TANKS = "Storage Tanks"
+    REACTORS = "Reactors"
+    COLUMNS_TOWERS = "Columns/Towers"
+
+class Material(str, Enum):
+    NOT_SPECIFIED = "Not Specified"
+    CARBON_STEEL = "Carbon Steel"
+    STAINLESS_STEEL_304_316 = "Stainless Steel 304/316"
+    DUPLEX_STAINLESS_STEEL = "Duplex Stainless Steel"
+    SUPER_DUPLEX_2507 = "Super Duplex (2507)"
+    INCONEL_625 = "Inconel 625"
+    HASTELLOY_C276 = "Hastelloy C-276"
+
+class CalcMaterial(str, Enum):
+    NOT_SPECIFIED = "Not Specified"
+    CARBON_STEEL = "Carbon Steel"
+    STAINLESS_STEEL_304_316 = "Stainless Steel 304/316"
+    DUPLEX_STAINLESS_STEEL = "Duplex Stainless Steel"
+    ALUMINUM = "Aluminum"
+    COPPER = "Copper"
+    OTHER = "Other"
+
+class DamageMechanism(str, Enum):
+    NOT_SPECIFIED = "Not Specified"
+    PITTING_CORROSION = "Pitting Corrosion"
+    CREVICE_CORROSION = "Crevice Corrosion"
+    STRESS_CORROSION_CRACKING = "Stress Corrosion Cracking"
+    GENERAL_CORROSION = "General Corrosion"
+    HYDROGEN_EMBRITTLEMENT = "Hydrogen Embrittlement"
+    FATIGUE_CRACKING = "Fatigue Cracking"
+    HIGH_TEMPERATURE_CORROSION = "High Temperature Corrosion"
+    EROSION_CORROSION = "Erosion-Corrosion"
+
+class Environment(str, Enum):
+    NOT_SPECIFIED = "Not Specified"
+    MARINE_OFFSHORE = "Marine/Offshore"
+    SOUR_SERVICE_H2S = "Sour Service (H2S)"
+    HIGH_TEMPERATURE = "High Temperature"
+    CHLORIDE_ENVIRONMENT = "Chloride Environment"
+    CAUSTIC_SERVICE = "Caustic Service"
+    ATMOSPHERIC = "Atmospheric"
+
+class CalcEnvironment(str, Enum):
+    NOT_SPECIFIED = "Not Specified"
+    GENERAL_SERVICE = "General Service"
+    MARINE_OFFSHORE = "Marine/Offshore"
+    SOUR_SERVICE_H2S = "Sour Service (H2S)"
+    HIGH_TEMPERATURE = "High Temperature"
+    CHLORIDE_ENVIRONMENT = "Chloride Environment"
+    ATMOSPHERIC = "Atmospheric"
+
+class ModelType(str, Enum):
+    INSTANT = "instant"
+    VERSATILE = "versatile"
+
+class ValidationStatus(str, Enum):
+    NORMAL = "normal"
+    HIGH = "high"
+    LOW = "low"
+    ERROR = "error"
+    UNKNOWN = "unknown"
+
+# Pydantic Models
+class ModelConfig(BaseModel):
+    name: str = Field(..., description="Model name identifier")
+    cost_per_token: float = Field(..., gt=0, description="Relative cost per token")
+    speed: str = Field(..., description="Speed category")
+    reasoning: str = Field(..., description="Reasoning capability")
+    use_cases: List[str] = Field(..., description="Applicable use cases")
+
+class EquipmentContext(BaseModel):
+    equipment_type: EquipmentType = EquipmentType.NOT_SPECIFIED
+    material: Material = Material.NOT_SPECIFIED
+    environment: Environment = Environment.NOT_SPECIFIED
+    damage_mechanism: DamageMechanism = DamageMechanism.NOT_SPECIFIED
+    temperature: Optional[float] = Field(None, ge=-50, le=1000, description="Temperature in Celsius")
+    pressure: Optional[float] = Field(None, ge=0, le=500, description="Pressure in bar")
+
+    @validator('temperature')
+    def validate_temperature(cls, v):
+        if v is not None and (v < -273.15):  # Absolute zero check
+            raise ValueError('Temperature cannot be below absolute zero')
+        return v
+
+class CalculatorInput(BaseModel):
+    initial_thickness: float = Field(..., gt=0, le=500, description="Initial thickness in mm")
+    current_thickness: float = Field(..., gt=0, le=500, description="Current thickness in mm")
+    service_years: float = Field(..., gt=0, le=50, description="Service time in years")
+    min_thickness: float = Field(..., gt=0, le=500, description="Minimum required thickness in mm")
+    equipment_id: Optional[str] = Field(None, max_length=50, description="Equipment identifier")
+    equipment_type: EquipmentType = EquipmentType.NOT_SPECIFIED
+    material: CalcMaterial = CalcMaterial.NOT_SPECIFIED
+    environment: CalcEnvironment = CalcEnvironment.NOT_SPECIFIED
+
+    @validator('current_thickness')
+    def validate_current_thickness(cls, v, values):
+        if 'initial_thickness' in values and v > values['initial_thickness']:
+            raise ValueError('Current thickness cannot exceed initial thickness')
+        return v
+
+    @validator('min_thickness')
+    def validate_min_thickness(cls, v, values):
+        if 'current_thickness' in values and v > values['current_thickness']:
+            raise ValueError('Minimum thickness should not exceed current thickness')
+        return v
+
+class CorrosionCalculationResult(BaseModel):
+    corrosion_rate: float = Field(..., description="Corrosion rate in mm/year")
+    thickness_loss: float = Field(..., description="Total thickness loss in mm")
+    remaining_life: Optional[float] = Field(None, description="Remaining life in years")
+    error_message: Optional[str] = Field(None, description="Error message if calculation failed")
+
+class ValidationResult(BaseModel):
+    status: ValidationStatus
+    message: str
+    api_reference: str
+
+class ChatMessage(BaseModel):
+    role: str = Field(..., regex="^(user|assistant)$")
+    content: str = Field(..., min_length=1, max_length=10000)
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+class CacheEntry(BaseModel):
+    response: str
+    timestamp: datetime
+    query_hash: str
+
+class SearchResult(BaseModel):
+    content: str
+    success: bool = True
+    error_message: Optional[str] = None
+
+class APIConfig(BaseModel):
+    groq_api_key: Optional[str] = Field(None, description="Groq API key")
+    pinecone_api_key: Optional[str] = Field(None, description="Pinecone API key")
+    tavily_api_key: Optional[str] = Field(None, description="Tavily API key")
+
+    @validator('groq_api_key', 'pinecone_api_key')
+    def validate_required_keys(cls, v, field):
+        if not v:
+            raise ValueError(f'{field.name} is required')
+        return v
+
+# Configuration data for analysis page
+EQUIPMENT_TYPES = [e.value for e in EquipmentType]
+MATERIALS = [m.value for m in Material]
+DAMAGE_MECHANISMS = [d.value for d in DamageMechanism]
+ENVIRONMENTS = [e.value for e in Environment]
+
+# Calculator-specific materials (simplified for Phase 1)
+CALC_MATERIALS = [m.value for m in CalcMaterial]
+CALC_ENVIRONMENTS = [e.value for e in CalcEnvironment]
+
 # API Documents configuration
 API_INDEXES = {
     "api571": "api571-damage-mechanisms",
     "api970": "api970-corrosion-control", 
     "api584": "api584-integrity-windows"
 }
-
-# Configuration data for analysis page
-EQUIPMENT_TYPES = [
-    "Pressure Vessels", "Piping Systems", "Heat Exchangers", 
-    "Storage Tanks", "Reactors", "Columns/Towers"
-]
-
-MATERIALS = [
-    "Carbon Steel", "Stainless Steel 304/316", "Duplex Stainless Steel", 
-    "Super Duplex (2507)", "Inconel 625", "Hastelloy C-276"
-]
-
-DAMAGE_MECHANISMS = [
-    "Pitting Corrosion", "Crevice Corrosion", "Stress Corrosion Cracking",
-    "General Corrosion", "Hydrogen Embrittlement", "Fatigue Cracking",
-    "High Temperature Corrosion", "Erosion-Corrosion"
-]
-
-ENVIRONMENTS = [
-    "Marine/Offshore", "Sour Service (H2S)", "High Temperature", 
-    "Chloride Environment", "Caustic Service", "Atmospheric"
-]
-
-# Calculator-specific materials (simplified for Phase 1)
-CALC_MATERIALS = [
-    "Carbon Steel", "Stainless Steel 304/316", "Duplex Stainless Steel", 
-    "Aluminum", "Copper", "Other"
-]
-
-CALC_ENVIRONMENTS = [
-    "General Service", "Marine/Offshore", "Sour Service (H2S)", 
-    "High Temperature", "Chloride Environment", "Atmospheric"
-]
 
 # Example questions for sidebar
 SMART_EXAMPLES = [
@@ -78,82 +206,82 @@ SMART_EXAMPLES = [
 
 # API 571 Typical Corrosion Rates (mm/year) - Simplified lookup table
 API_571_RATES = {
-    "Carbon Steel": {
-        "General Service": (0.05, 0.3),
-        "Marine/Offshore": (0.2, 1.0),
-        "Sour Service (H2S)": (0.3, 2.0),
-        "High Temperature": (0.5, 3.0),
-        "Chloride Environment": (0.3, 1.5),
-        "Atmospheric": (0.02, 0.2)
+    CalcMaterial.CARBON_STEEL.value: {
+        CalcEnvironment.GENERAL_SERVICE.value: (0.05, 0.3),
+        CalcEnvironment.MARINE_OFFSHORE.value: (0.2, 1.0),
+        CalcEnvironment.SOUR_SERVICE_H2S.value: (0.3, 2.0),
+        CalcEnvironment.HIGH_TEMPERATURE.value: (0.5, 3.0),
+        CalcEnvironment.CHLORIDE_ENVIRONMENT.value: (0.3, 1.5),
+        CalcEnvironment.ATMOSPHERIC.value: (0.02, 0.2)
     },
-    "Stainless Steel 304/316": {
-        "General Service": (0.001, 0.05),
-        "Marine/Offshore": (0.01, 0.3),
-        "Sour Service (H2S)": (0.05, 0.5),
-        "High Temperature": (0.1, 1.0),
-        "Chloride Environment": (0.1, 2.0),
-        "Atmospheric": (0.001, 0.01)
+    CalcMaterial.STAINLESS_STEEL_304_316.value: {
+        CalcEnvironment.GENERAL_SERVICE.value: (0.001, 0.05),
+        CalcEnvironment.MARINE_OFFSHORE.value: (0.01, 0.3),
+        CalcEnvironment.SOUR_SERVICE_H2S.value: (0.05, 0.5),
+        CalcEnvironment.HIGH_TEMPERATURE.value: (0.1, 1.0),
+        CalcEnvironment.CHLORIDE_ENVIRONMENT.value: (0.1, 2.0),
+        CalcEnvironment.ATMOSPHERIC.value: (0.001, 0.01)
     },
-    "Duplex Stainless Steel": {
-        "General Service": (0.001, 0.02),
-        "Marine/Offshore": (0.005, 0.1),
-        "Sour Service (H2S)": (0.01, 0.2),
-        "High Temperature": (0.05, 0.5),
-        "Chloride Environment": (0.01, 0.3),
-        "Atmospheric": (0.001, 0.005)
+    CalcMaterial.DUPLEX_STAINLESS_STEEL.value: {
+        CalcEnvironment.GENERAL_SERVICE.value: (0.001, 0.02),
+        CalcEnvironment.MARINE_OFFSHORE.value: (0.005, 0.1),
+        CalcEnvironment.SOUR_SERVICE_H2S.value: (0.01, 0.2),
+        CalcEnvironment.HIGH_TEMPERATURE.value: (0.05, 0.5),
+        CalcEnvironment.CHLORIDE_ENVIRONMENT.value: (0.01, 0.3),
+        CalcEnvironment.ATMOSPHERIC.value: (0.001, 0.005)
     },
-    "Aluminum": {
-        "General Service": (0.01, 0.1),
-        "Marine/Offshore": (0.1, 0.5),
-        "Sour Service (H2S)": (0.05, 0.3),
-        "High Temperature": (0.2, 1.0),
-        "Chloride Environment": (0.2, 1.5),
-        "Atmospheric": (0.005, 0.05)
+    CalcMaterial.ALUMINUM.value: {
+        CalcEnvironment.GENERAL_SERVICE.value: (0.01, 0.1),
+        CalcEnvironment.MARINE_OFFSHORE.value: (0.1, 0.5),
+        CalcEnvironment.SOUR_SERVICE_H2S.value: (0.05, 0.3),
+        CalcEnvironment.HIGH_TEMPERATURE.value: (0.2, 1.0),
+        CalcEnvironment.CHLORIDE_ENVIRONMENT.value: (0.2, 1.5),
+        CalcEnvironment.ATMOSPHERIC.value: (0.005, 0.05)
     },
-    "Copper": {
-        "General Service": (0.005, 0.05),
-        "Marine/Offshore": (0.05, 0.3),
-        "Sour Service (H2S)": (0.1, 0.8),
-        "High Temperature": (0.1, 0.5),
-        "Chloride Environment": (0.1, 0.8),
-        "Atmospheric": (0.002, 0.02)
+    CalcMaterial.COPPER.value: {
+        CalcEnvironment.GENERAL_SERVICE.value: (0.005, 0.05),
+        CalcEnvironment.MARINE_OFFSHORE.value: (0.05, 0.3),
+        CalcEnvironment.SOUR_SERVICE_H2S.value: (0.1, 0.8),
+        CalcEnvironment.HIGH_TEMPERATURE.value: (0.1, 0.5),
+        CalcEnvironment.CHLORIDE_ENVIRONMENT.value: (0.1, 0.8),
+        CalcEnvironment.ATMOSPHERIC.value: (0.002, 0.02)
     },
-    "Other": {
-        "General Service": (0.01, 0.5),
-        "Marine/Offshore": (0.05, 1.0),
-        "Sour Service (H2S)": (0.1, 2.0),
-        "High Temperature": (0.2, 3.0),
-        "Chloride Environment": (0.1, 2.0),
-        "Atmospheric": (0.005, 0.1)
+    CalcMaterial.OTHER.value: {
+        CalcEnvironment.GENERAL_SERVICE.value: (0.01, 0.5),
+        CalcEnvironment.MARINE_OFFSHORE.value: (0.05, 1.0),
+        CalcEnvironment.SOUR_SERVICE_H2S.value: (0.1, 2.0),
+        CalcEnvironment.HIGH_TEMPERATURE.value: (0.2, 3.0),
+        CalcEnvironment.CHLORIDE_ENVIRONMENT.value: (0.1, 2.0),
+        CalcEnvironment.ATMOSPHERIC.value: (0.005, 0.1)
     }
 }
 
 # Hybrid LLM Model Configuration
 MODEL_CONFIG = {
-    "instant": {
-        "name": "llama-3.1-8b-instant",
-        "cost_per_token": 0.05,  # Relative cost (instant = 1x)
-        "speed": "very_fast",
-        "reasoning": "basic",
-        "use_cases": ["simple_queries", "quick_facts", "cached_responses"]
-    },
-    "versatile": {
-        "name": "llama-3.3-70b-versatile", 
-        "cost_per_token": 0.8,  # Relative cost (versatile = 16x more expensive)
-        "speed": "fast",
-        "reasoning": "advanced",
-        "use_cases": ["complex_analysis", "engineering_calculations", "structured_reports"]
-    }
+    ModelType.INSTANT.value: ModelConfig(
+        name="llama-3.1-8b-instant",
+        cost_per_token=0.05,  # Relative cost (instant = 1x)
+        speed="very_fast",
+        reasoning="basic",
+        use_cases=["simple_queries", "quick_facts", "cached_responses"]
+    ),
+    ModelType.VERSATILE.value: ModelConfig(
+        name="llama-3.3-70b-versatile", 
+        cost_per_token=0.8,  # Relative cost (versatile = 16x more expensive)
+        speed="fast",
+        reasoning="advanced",
+        use_cases=["complex_analysis", "engineering_calculations", "structured_reports"]
+    )
 }
 
-# Simple caching system
+# Simple caching system with Pydantic validation
 class SimpleCache:
-    def __init__(self, ttl_hours=24):
+    def __init__(self, ttl_hours: int = 24):
         self.ttl_hours = ttl_hours
         if "chat_cache" not in st.session_state:
             st.session_state.chat_cache = {}
     
-    def _create_key(self, query: str, context: dict = None) -> str:
+    def _create_key(self, query: str, context: Optional[Dict] = None) -> str:
         """Create cache key from query and context"""
         normalized = re.sub(r'[^\w\s]', '', query.lower())
         normalized = re.sub(r'\s+', ' ', normalized).strip()
@@ -166,31 +294,41 @@ class SimpleCache:
             
         return hashlib.md5(cache_string.encode()).hexdigest()
     
-    def get(self, query: str, context: dict = None):
+    def get(self, query: str, context: Optional[Dict] = None) -> Optional[str]:
         """Get cached response if valid"""
-        key = self._create_key(query, context)
-        if key in st.session_state.chat_cache:
-            cache_data = st.session_state.chat_cache[key]
-            cache_time = datetime.fromisoformat(cache_data["timestamp"])
-            if datetime.now() - cache_time < timedelta(hours=self.ttl_hours):
-                return cache_data["response"]
-            else:
-                del st.session_state.chat_cache[key]
+        try:
+            key = self._create_key(query, context)
+            if key in st.session_state.chat_cache:
+                cache_data = st.session_state.chat_cache[key]
+                # Validate cache entry
+                cache_entry = CacheEntry(**cache_data)
+                if datetime.now() - cache_entry.timestamp < timedelta(hours=self.ttl_hours):
+                    return cache_entry.response
+                else:
+                    del st.session_state.chat_cache[key]
+        except (ValidationError, KeyError, ValueError):
+            # Invalid cache entry, skip
+            pass
         return None
     
-    def set(self, query: str, response: str, context: dict = None):
-        """Cache a response"""
-        key = self._create_key(query, context)
-        st.session_state.chat_cache[key] = {
-            "response": response,
-            "timestamp": datetime.now().isoformat()
-        }
+    def set(self, query: str, response: str, context: Optional[Dict] = None):
+        """Cache a response with validation"""
+        try:
+            key = self._create_key(query, context)
+            cache_entry = CacheEntry(
+                response=response,
+                timestamp=datetime.now(),
+                query_hash=key
+            )
+            st.session_state.chat_cache[key] = cache_entry.dict()
+        except ValidationError as e:
+            st.warning(f"Cache validation error: {e}")
 
 # Hybrid LLM Functions
-def analyze_query_complexity(query: str, equipment_context: dict = None, chat_history: List[dict] = None) -> str:
+def analyze_query_complexity(query: str, equipment_context: Optional[EquipmentContext] = None, chat_history: Optional[List[ChatMessage]] = None) -> ModelType:
     """
     Analyze query complexity to determine which model to use
-    Returns: 'instant' or 'versatile'
+    Returns: ModelType enum
     """
     
     # Initialize complexity score
@@ -239,7 +377,8 @@ def analyze_query_complexity(query: str, equipment_context: dict = None, chat_hi
     
     # 3. EQUIPMENT CONTEXT ANALYSIS
     if equipment_context:
-        specified_params = sum(1 for v in equipment_context.values() if v and v != "Not Specified")
+        specified_params = sum(1 for field_name, field_value in equipment_context:
+                             if field_value is not None and str(field_value) != "Not Specified")
         if specified_params >= 4:  # Many parameters specified = complex analysis
             complexity_score += 3
         elif specified_params >= 2:
@@ -250,7 +389,7 @@ def analyze_query_complexity(query: str, equipment_context: dict = None, chat_hi
         # Check if this is a follow-up to a complex discussion
         recent_messages = chat_history[-4:]
         for msg in recent_messages:
-            if any(keyword in msg.get('content', '').lower() for keyword in complex_keywords):
+            if any(keyword in msg.content.lower() for keyword in complex_keywords):
                 complexity_score += 1
                 break
     
@@ -268,7 +407,7 @@ def analyze_query_complexity(query: str, equipment_context: dict = None, chat_hi
         'damage mechanism',
         'mitigation strateg'
     ]):
-        return 'versatile'
+        return ModelType.VERSATILE
     
     # Force INSTANT for these scenarios  
     if any(pattern in query_lower for pattern in [
@@ -279,36 +418,43 @@ def analyze_query_complexity(query: str, equipment_context: dict = None, chat_hi
         'hello', 'hi', 'thank',
         'what does', 'how do you'
     ]):
-        return 'instant'
+        return ModelType.INSTANT
     
     # 6. FINAL DECISION BASED ON SCORE
     if complexity_score >= 4:
-        return 'versatile'
+        return ModelType.VERSATILE
     elif complexity_score <= 1:
-        return 'instant'
+        return ModelType.INSTANT
     else:
         # Medium complexity - consider additional factors
         if equipment_context or word_count > 15:
-            return 'versatile'
+            return ModelType.VERSATILE
         else:
-            return 'instant'
+            return ModelType.INSTANT
 
 @st.cache_resource
 def setup_hybrid_llm():
-    """Setup both LLM models for hybrid use"""
-    if not os.environ.get("GROQ_API_KEY"):
-        st.error("❌ GROQ_API_KEY not found. Please check your .env file.")
+    """Setup both LLM models for hybrid use with validation"""
+    try:
+        # Validate API configuration
+        api_config = APIConfig(
+            groq_api_key=os.environ.get("GROQ_API_KEY"),
+            pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+            tavily_api_key=os.environ.get("TAVILY_API_KEY")
+        )
+    except ValidationError as e:
+        st.error(f"❌ API Configuration Error: {e}")
         return None, None
     
     try:
         instant_llm = ChatGroq(
-            model="llama-3.1-8b-instant",
+            model=MODEL_CONFIG[ModelType.INSTANT.value].name,
             temperature=0.1,
             streaming=True
         )
         
         versatile_llm = ChatGroq(
-            model="llama-3.3-70b-versatile", 
+            model=MODEL_CONFIG[ModelType.VERSATILE.value].name,
             temperature=0.1,
             streaming=True
         )
@@ -319,40 +465,43 @@ def setup_hybrid_llm():
         st.error(f"❌ Error setting up hybrid LLM: {e}")
         return None, None
 
-def get_appropriate_llm(query: str, equipment_context: dict = None, chat_history: List[dict] = None):
+def get_appropriate_llm(query: str, equipment_context: Optional[EquipmentContext] = None, chat_history: Optional[List[ChatMessage]] = None):
     """Get the appropriate LLM based on query complexity"""
     
     # Get both models
     instant_llm, versatile_llm = setup_hybrid_llm()
     
     if not instant_llm or not versatile_llm:
-        return None, "unknown"
+        return None, ModelType.INSTANT
     
     # Analyze complexity
     model_choice = analyze_query_complexity(query, equipment_context, chat_history)
     
     # Return appropriate model
-    if model_choice == "versatile":
-        return versatile_llm, "versatile"
+    if model_choice == ModelType.VERSATILE:
+        return versatile_llm, ModelType.VERSATILE
     else:
-        return instant_llm, "instant"
+        return instant_llm, ModelType.INSTANT
 
-# Calculator Functions
-def calculate_corrosion_rate(initial_thickness: float, current_thickness: float, service_years: float) -> Tuple[Optional[float], Optional[str]]:
-    """Calculate corrosion rate in mm/year"""
+# Calculator Functions with Pydantic validation
+def calculate_corrosion_rate(calc_input: CalculatorInput) -> CorrosionCalculationResult:
+    """Calculate corrosion rate in mm/year with Pydantic validation"""
     try:
-        if service_years <= 0:
-            return None, "Service time must be positive"
+        thickness_loss = calc_input.initial_thickness - calc_input.current_thickness
+        corrosion_rate = thickness_loss / calc_input.service_years
         
-        if current_thickness > initial_thickness:
-            return None, "Current thickness cannot exceed initial thickness"
-        
-        thickness_loss = initial_thickness - current_thickness
-        corrosion_rate = thickness_loss / service_years
-        
-        return corrosion_rate, None
+        return CorrosionCalculationResult(
+            corrosion_rate=corrosion_rate,
+            thickness_loss=thickness_loss,
+            remaining_life=None  # Will be calculated separately
+        )
     except Exception as e:
-        return None, f"Calculation error: {str(e)}"
+        return CorrosionCalculationResult(
+            corrosion_rate=0.0,
+            thickness_loss=0.0,
+            remaining_life=None,
+            error_message=f"Calculation error: {str(e)}"
+        )
 
 def calculate_remaining_life(current_thickness: float, min_thickness: float, corrosion_rate: float) -> Tuple[Optional[float], Optional[str]]:
     """Calculate remaining service life in years"""
@@ -370,40 +519,43 @@ def calculate_remaining_life(current_thickness: float, min_thickness: float, cor
     except Exception as e:
         return None, f"Calculation error: {str(e)}"
 
-def validate_corrosion_rate(rate: float, material: str, environment: str) -> Dict[str, str]:
-    """Validate corrosion rate against API 571 standards"""
-    validation_result = {
-        "status": "unknown",
-        "message": "",
-        "api_reference": ""
-    }
-    
+def validate_corrosion_rate(rate: float, material: CalcMaterial, environment: CalcEnvironment) -> ValidationResult:
+    """Validate corrosion rate against API 571 standards with Pydantic"""
     try:
-        if material in API_571_RATES and environment in API_571_RATES[material]:
-            min_rate, max_rate = API_571_RATES[material][environment]
+        if material.value in API_571_RATES and environment.value in API_571_RATES[material.value]:
+            min_rate, max_rate = API_571_RATES[material.value][environment.value]
             
             if rate < min_rate:
-                validation_result["status"] = "low"
-                validation_result["message"] = f"Rate below typical range ({min_rate}-{max_rate} mm/year)"
-                validation_result["api_reference"] = "API 571 - Verify measurements"
+                return ValidationResult(
+                    status=ValidationStatus.LOW,
+                    message=f"Rate below typical range ({min_rate}-{max_rate} mm/year)",
+                    api_reference="API 571 - Verify measurements"
+                )
             elif rate > max_rate:
-                validation_result["status"] = "high" 
-                validation_result["message"] = f"Rate above typical range ({min_rate}-{max_rate} mm/year)"
-                validation_result["api_reference"] = "API 571 - Review service conditions"
+                return ValidationResult(
+                    status=ValidationStatus.HIGH,
+                    message=f"Rate above typical range ({min_rate}-{max_rate} mm/year)",
+                    api_reference="API 571 - Review service conditions"
+                )
             else:
-                validation_result["status"] = "normal"
-                validation_result["message"] = f"Rate within expected range ({min_rate}-{max_rate} mm/year)"
-                validation_result["api_reference"] = "API 571 - Validated"
+                return ValidationResult(
+                    status=ValidationStatus.NORMAL,
+                    message=f"Rate within expected range ({min_rate}-{max_rate} mm/year)",
+                    api_reference="API 571 - Validated"
+                )
         else:
-            validation_result["status"] = "unknown"
-            validation_result["message"] = "No API reference data available"
-            validation_result["api_reference"] = "Manual validation required"
+            return ValidationResult(
+                status=ValidationStatus.UNKNOWN,
+                message="No API reference data available",
+                api_reference="Manual validation required"
+            )
             
     except Exception as e:
-        validation_result["status"] = "error"
-        validation_result["message"] = f"Validation error: {str(e)}"
-        
-    return validation_result
+        return ValidationResult(
+            status=ValidationStatus.ERROR,
+            message=f"Validation error: {str(e)}",
+            api_reference="Error occurred"
+        )
 
 def create_thickness_trend_chart(initial: float, current: float, years: float, rate: float) -> go.Figure:
     """Create a simple thickness trend chart"""
@@ -506,12 +658,19 @@ def setup_embeddings():
 
 @st.cache_resource  
 def setup_vectorstores():
-    """Setup vector stores for API documents"""
-    if not os.environ.get("PINECONE_API_KEY"):
+    """Setup vector stores for API documents with validation"""
+    try:
+        # Validate Pinecone API key
+        api_config = APIConfig(
+            groq_api_key=os.environ.get("GROQ_API_KEY", "dummy"),
+            pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+            tavily_api_key=os.environ.get("TAVILY_API_KEY", "dummy")
+        )
+    except ValidationError:
         st.error("❌ PINECONE_API_KEY not found. Please check your .env file.")
         return {}, False
     
-    pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
+    pc = Pinecone(api_key=api_config.pinecone_api_key)
     embeddings = setup_embeddings()
     vectorstores = {}
     
@@ -618,8 +777,8 @@ def format_documents(docs) -> str:
     
     return "\n".join(formatted_docs)
 
-def get_conversation_context(chat_history: List[dict], max_messages: int = 4) -> str:
-    """Get recent conversation context"""
+def get_conversation_context(chat_history: List[ChatMessage], max_messages: int = 4) -> str:
+    """Get recent conversation context with Pydantic validation"""
     if len(chat_history) <= 1:
         return ""
     
@@ -627,21 +786,31 @@ def get_conversation_context(chat_history: List[dict], max_messages: int = 4) ->
     context_parts = []
     
     for msg in recent_messages:
-        if msg["role"] == "user":
-            context_parts.append(f"User: {msg['content']}")
-        elif msg["role"] == "assistant":
-            # Include only first 150 characters of response for context
-            summary = msg['content'][:150] + "..." if len(msg['content']) > 150 else msg['content']
-            context_parts.append(f"Assistant: {summary}")
+        try:
+            # Validate message structure
+            validated_msg = ChatMessage(**msg.dict() if hasattr(msg, 'dict') else msg)
+            if validated_msg.role == "user":
+                context_parts.append(f"User: {validated_msg.content}")
+            elif validated_msg.role == "assistant":
+                # Include only first 150 characters of response for context
+                summary = validated_msg.content[:150] + "..." if len(validated_msg.content) > 150 else validated_msg.content
+                context_parts.append(f"Assistant: {summary}")
+        except ValidationError:
+            # Skip invalid messages
+            continue
     
     return "\n".join(context_parts) if context_parts else ""
 
-def search_web_tavily(query: str, max_results: int = 5, is_mci: bool = True) -> str:
-    """Search web using Tavily API for MCI and engineering topics"""
+def search_web_tavily(query: str, max_results: int = 5, is_mci: bool = True) -> SearchResult:
+    """Search web using Tavily API for MCI and engineering topics with Pydantic validation"""
     
     tavily_api_key = os.environ.get("TAVILY_API_KEY")
     if not tavily_api_key:
-        return "Web search unavailable - TAVILY_API_KEY not configured."
+        return SearchResult(
+            content="Web search unavailable - TAVILY_API_KEY not configured.",
+            success=False,
+            error_message="Missing API key"
+        )
     
     try:
         # Focus search on engineering/MCI topics
@@ -690,13 +859,22 @@ def search_web_tavily(query: str, max_results: int = 5, is_mci: bool = True) -> 
                     f"Content: {content[:500]}...\n"
                 )
             
-            return "\n".join(web_content) if web_content else "No relevant web results found."
+            content = "\n".join(web_content) if web_content else "No relevant web results found."
+            return SearchResult(content=content, success=True)
             
         else:
-            return f"Web search error: HTTP {response.status_code}"
+            return SearchResult(
+                content=f"Web search error: HTTP {response.status_code}",
+                success=False,
+                error_message=f"HTTP {response.status_code}"
+            )
             
     except Exception as e:
-        return f"Web search failed: {str(e)}"
+        return SearchResult(
+            content=f"Web search failed: {str(e)}",
+            success=False,
+            error_message=str(e)
+        )
 
 def assess_content_sufficiency(docs: List, query: str) -> Tuple[bool, str]:
     """Assess if retrieved API documents are sufficient to answer the query"""
@@ -1006,24 +1184,31 @@ Express all temperatures in °C and pressures in bar. Be thorough but concise in
 Analysis:"""
     )
 
-# Hybrid streaming response function
-def generate_response_stream_hybrid(query: str, vectorstores: dict, chat_history: List[dict] = None, equipment_context: dict = None):
-    """Generate streaming response with hybrid LLM selection"""
+# Hybrid streaming response function with Pydantic validation
+def generate_response_stream_hybrid(query: str, vectorstores: dict, chat_history: Optional[List[ChatMessage]] = None, equipment_context: Optional[EquipmentContext] = None):
+    """Generate streaming response with hybrid LLM selection and Pydantic validation"""
     try:
+        # Validate inputs
+        if chat_history:
+            validated_chat_history = []
+            for msg in chat_history:
+                try:
+                    if isinstance(msg, dict):
+                        validated_msg = ChatMessage(**msg)
+                    else:
+                        validated_msg = msg
+                    validated_chat_history.append(validated_msg)
+                except ValidationError:
+                    # Skip invalid messages
+                    continue
+            chat_history = validated_chat_history
+        
         # Get appropriate LLM
         llm, model_used = get_appropriate_llm(query, equipment_context, chat_history)
         
         if not llm:
             yield "❌ Error: Could not initialize LLM models."
             return
-        
-        # Optional: Show model selection info (uncomment for debugging)
-        # model_info = f"🤖 Using {MODEL_CONFIG[model_used]['name']} "
-        # if model_used == "versatile":
-        #     model_info += "(Advanced reasoning)"
-        # else:
-        #     model_info += "(Fast response)"
-        # yield f"{model_info}\n\n"
         
         # Check if query is MCI or engineering-related
         is_mci = is_mci_related(query)
@@ -1044,7 +1229,7 @@ def generate_response_stream_hybrid(query: str, vectorstores: dict, chat_history
         # Smarter web searching based on model and complexity
         should_search = False
         
-        if model_used == "versatile":
+        if model_used == ModelType.VERSATILE:
             # For complex queries, be more thorough with search
             if is_mci and len(docs) < 3:
                 should_search = True
@@ -1057,14 +1242,22 @@ def generate_response_stream_hybrid(query: str, vectorstores: dict, chat_history
         
         if should_search:
             yield "🔍 Searching...\n\n"
-            web_context = search_web_tavily(query, is_mci=True)
-            search_used = "✅ "
+            search_result = search_web_tavily(query, is_mci=True)
+            if search_result.success:
+                web_context = search_result.content
+                search_used = "✅ "
+            else:
+                web_context = search_result.content
+                search_used = "⚠️ "
         
         # Prepare prompt
         if equipment_context:
-            context_parts = [f"{k.replace('_', ' ').title()}: {v}" 
-                           for k, v in equipment_context.items() 
-                           if v and v != "Not Specified"]
+            context_parts = []
+            for field_name, field_value in equipment_context:
+                if field_value is not None and str(field_value) != "Not Specified":
+                    display_name = field_name.replace('_', ' ').title()
+                    context_parts.append(f"{display_name}: {field_value}")
+            
             context_string = " | ".join(context_parts) if context_parts else "General analysis"
             
             prompt_template = create_analysis_prompt()
@@ -1075,7 +1268,7 @@ def generate_response_stream_hybrid(query: str, vectorstores: dict, chat_history
             )
         else:
             # Adjust conversation context based on model
-            max_messages = 3 if model_used == "versatile" else 2
+            max_messages = 3 if model_used == ModelType.VERSATILE else 2
             conversation_context = get_conversation_context(chat_history or [], max_messages=max_messages)
             
             prompt_template = create_hybrid_chat_prompt()
@@ -1104,7 +1297,7 @@ def generate_response_stream_hybrid(query: str, vectorstores: dict, chat_history
     except Exception as e:
         yield f"\n\n❌ Error: {str(e)}. Please try again."
 
-def generate_response(query: str, vectorstores: dict, llm=None, chat_history: List[dict] = None, equipment_context: dict = None) -> str:
+def generate_response(query: str, vectorstores: dict, llm=None, chat_history: Optional[List[ChatMessage]] = None, equipment_context: Optional[EquipmentContext] = None) -> str:
     """Generate non-streaming response for compatibility"""
     try:
         # Collect all streaming chunks
@@ -1117,9 +1310,9 @@ def generate_response(query: str, vectorstores: dict, llm=None, chat_history: Li
     except Exception as e:
         return f"I encountered an error while processing your request: {str(e)}. Please try again."
 
-# Calculator page (unchanged)
+# Calculator page with Pydantic validation
 def calculator_page():
-    """Corrosion Rate Calculator page implementation - Phase 1"""
+    """Corrosion Rate Calculator page implementation with Pydantic validation"""
     st.title("🧮 Corrosion Rate Calculator")
     st.markdown("**Calculate corrosion rates and remaining equipment life**")
     
@@ -1177,20 +1370,20 @@ def calculator_page():
         
         equipment_type = st.selectbox(
             "Equipment Type",
-            ["Not Specified"] + EQUIPMENT_TYPES,
+            EQUIPMENT_TYPES,
             help="Select equipment type for better validation"
         )
     
     with col2:
         material = st.selectbox(
             "Material",
-            ["Not Specified"] + CALC_MATERIALS,
+            CALC_MATERIALS,
             help="Select material for API cross-reference"
         )
         
         environment = st.selectbox(
             "Service Environment",
-            ["Not Specified"] + CALC_ENVIRONMENTS,
+            CALC_ENVIRONMENTS,
             help="Select environment for validation"
         )
     
@@ -1215,38 +1408,31 @@ def calculator_page():
             corrosion_allowance = initial_thickness - min_thickness
             st.metric("Corrosion Allowance", f"{corrosion_allowance:.2f} mm")
     
-    # Real-time validation and warnings
-    validation_messages = []
-    
-    if current_thickness > initial_thickness:
-        st.error("❌ Current thickness cannot exceed initial thickness")
-        validation_messages.append("Invalid thickness measurements")
-    
-    if min_thickness and current_thickness <= min_thickness:
-        st.error("🚨 CRITICAL: Equipment is below minimum required thickness!")
-        validation_messages.append("Below minimum thickness")
-    elif min_thickness and current_thickness < min_thickness * 1.1:
-        st.warning("⚠️ WARNING: Approaching minimum thickness")
-        validation_messages.append("Near minimum thickness")
-    
-    # Perform calculations
-    if initial_thickness and current_thickness and service_years and not validation_messages:
+    # Validate inputs using Pydantic
+    try:
+        calc_input = CalculatorInput(
+            initial_thickness=initial_thickness,
+            current_thickness=current_thickness,
+            service_years=service_years,
+            min_thickness=min_thickness,
+            equipment_id=equipment_id if equipment_id else None,
+            equipment_type=EquipmentType(equipment_type),
+            material=CalcMaterial(material),
+            environment=CalcEnvironment(environment)
+        )
         
-        # Calculate corrosion rate
-        corrosion_rate, rate_error = calculate_corrosion_rate(initial_thickness, current_thickness, service_years)
+        # If validation passes, perform calculations
+        calc_result = calculate_corrosion_rate(calc_input)
         
-        # Initialize validation variable
-        validation = {
-            'status': 'not_validated',
-            'message': 'No validation performed',
-            'api_reference': 'Not available'
-        }
-        
-        if rate_error:
-            st.error(f"Calculation Error: {rate_error}")
+        if calc_result.error_message:
+            st.error(f"Calculation Error: {calc_result.error_message}")
         else:
             # Calculate remaining life
-            remaining_life, life_error = calculate_remaining_life(current_thickness, min_thickness, corrosion_rate)
+            remaining_life, life_error = calculate_remaining_life(
+                calc_input.current_thickness, 
+                calc_input.min_thickness, 
+                calc_result.corrosion_rate
+            )
             
             # Display main results
             st.markdown("---")
@@ -1257,15 +1443,14 @@ def calculator_page():
             with col1:
                 st.metric(
                     "Corrosion Rate", 
-                    f"{corrosion_rate:.3f} mm/year",
+                    f"{calc_result.corrosion_rate:.3f} mm/year",
                     help="Rate of thickness loss per year"
                 )
             
             with col2:
-                thickness_loss = initial_thickness - current_thickness
                 st.metric(
                     "Total Thickness Loss",
-                    f"{thickness_loss:.2f} mm",
+                    f"{calc_result.thickness_loss:.2f} mm",
                     help="Total thickness lost during service time"
                 )
             
@@ -1285,27 +1470,31 @@ def calculator_page():
                     st.metric("Remaining Life", "N/A", help=life_error or "Cannot calculate")
             
             # API validation if material and environment specified
-            if material != "Not Specified" and environment != "Not Specified":
+            if calc_input.material != CalcMaterial.NOT_SPECIFIED and calc_input.environment != CalcEnvironment.NOT_SPECIFIED:
                 st.markdown("### 📚 **API 571 Validation**")
                 
-                # Update validation with actual results
-                validation = validate_corrosion_rate(corrosion_rate, material, environment)
+                validation = validate_corrosion_rate(calc_result.corrosion_rate, calc_input.material, calc_input.environment)
                 
-                if validation["status"] == "normal":
-                    st.success(f"✅ {validation['message']}")
-                elif validation["status"] == "high":
-                    st.warning(f"⚠️ {validation['message']}")
-                elif validation["status"] == "low":
-                    st.info(f"ℹ️ {validation['message']}")
+                if validation.status == ValidationStatus.NORMAL:
+                    st.success(f"✅ {validation.message}")
+                elif validation.status == ValidationStatus.HIGH:
+                    st.warning(f"⚠️ {validation.message}")
+                elif validation.status == ValidationStatus.LOW:
+                    st.info(f"ℹ️ {validation.message}")
                 else:
-                    st.info(f"ℹ️ {validation['message']}")
+                    st.info(f"ℹ️ {validation.message}")
                 
-                if validation["api_reference"]:
-                    st.caption(f"Reference: {validation['api_reference']}")
+                if validation.api_reference:
+                    st.caption(f"Reference: {validation.api_reference}")
             
             # Generate chart
             if st.checkbox("📈 Show Thickness Trend Chart"):
-                chart = create_thickness_trend_chart(initial_thickness, current_thickness, service_years, corrosion_rate)
+                chart = create_thickness_trend_chart(
+                    calc_input.initial_thickness, 
+                    calc_input.current_thickness, 
+                    calc_input.service_years, 
+                    calc_result.corrosion_rate
+                )
                 if chart:
                     st.plotly_chart(chart, use_container_width=True)
             
@@ -1314,11 +1503,11 @@ def calculator_page():
             
             recommendations = []
             
-            if corrosion_rate > 1.0:
+            if calc_result.corrosion_rate > 1.0:
                 recommendations.append("• **High corrosion rate detected** - Review service conditions and consider mitigation")
                 recommendations.append("• **Increase inspection frequency** - Monitor more closely")
                 recommendations.append("• **Consider material upgrade** - Evaluate more corrosion-resistant options")
-            elif corrosion_rate > 0.5:
+            elif calc_result.corrosion_rate > 0.5:
                 recommendations.append("• **Moderate corrosion rate** - Continue regular monitoring")
                 recommendations.append("• **Review operating conditions** - Ensure within design limits")
             else:
@@ -1336,20 +1525,20 @@ def calculator_page():
             
             # Store results for export
             st.session_state.calc_results = {
-                'equipment_id': equipment_id or 'Not specified',
-                'equipment_type': equipment_type,
-                'material': material,
-                'environment': environment,
-                'initial_thickness': initial_thickness,
-                'current_thickness': current_thickness,
-                'service_years': service_years,
-                'min_thickness': min_thickness,
-                'corrosion_rate': corrosion_rate,
-                'thickness_loss': thickness_loss,
+                'equipment_id': calc_input.equipment_id or 'Not specified',
+                'equipment_type': calc_input.equipment_type.value,
+                'material': calc_input.material.value,
+                'environment': calc_input.environment.value,
+                'initial_thickness': calc_input.initial_thickness,
+                'current_thickness': calc_input.current_thickness,
+                'service_years': calc_input.service_years,
+                'min_thickness': calc_input.min_thickness,
+                'corrosion_rate': calc_result.corrosion_rate,
+                'thickness_loss': calc_result.thickness_loss,
                 'remaining_life': remaining_life if remaining_life is not None else 'N/A',
-                'validation_status': validation.get('status', 'not_validated'),
-                'validation_message': validation.get('message', 'No validation performed'),
-                'api_reference': validation.get('api_reference', 'Not available'),
+                'validation_status': validation.status.value if 'validation' in locals() else 'not_validated',
+                'validation_message': validation.message if 'validation' in locals() else 'No validation performed',
+                'api_reference': validation.api_reference if 'validation' in locals() else 'Not available',
                 'recommendations': '\n'.join([rec.replace('• ', '- ') for rec in recommendations])
             }
             
@@ -1365,21 +1554,21 @@ def calculator_page():
                     st.download_button(
                         "📄 Download Report",
                         report_text,
-                        file_name=f"corrosion_calc_{equipment_id or 'equipment'}_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                        file_name=f"corrosion_calc_{calc_input.equipment_id or 'equipment'}_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                         mime="text/plain"
                     )
             
             with col2:
                 # Quick summary export
-                summary = f"""Equipment: {equipment_id or 'Not specified'}
-Corrosion Rate: {corrosion_rate:.3f} mm/year
+                summary = f"""Equipment: {calc_input.equipment_id or 'Not specified'}
+Corrosion Rate: {calc_result.corrosion_rate:.3f} mm/year
 Remaining Life: {remaining_life:.1f} years if remaining_life is not None else 'N/A'
-Status: {validation.get('status', 'not_validated').title()}"""
+Status: {validation.status.value.title() if 'validation' in locals() else 'not_validated'}"""
                 
                 st.download_button(
                     "📋 Quick Summary",
                     summary,
-                    file_name=f"summary_{equipment_id or 'equipment'}.txt",
+                    file_name=f"summary_{calc_input.equipment_id or 'equipment'}.txt",
                     mime="text/plain"
                 )
             
@@ -1387,58 +1576,79 @@ Status: {validation.get('status', 'not_validated').title()}"""
                 # CSV export for data analysis
                 if st.button("📊 CSV Data"):
                     csv_data = f"""Parameter,Value,Unit
-Equipment ID,{equipment_id or 'Not specified'},
-Equipment Type,{equipment_type},
-Material,{material},
-Environment,{environment},
-Initial Thickness,{initial_thickness},mm
-Current Thickness,{current_thickness},mm
-Service Time,{service_years},years
-Minimum Thickness,{min_thickness},mm
-Corrosion Rate,{corrosion_rate:.3f},mm/year
-Thickness Loss,{thickness_loss:.2f},mm
+Equipment ID,{calc_input.equipment_id or 'Not specified'},
+Equipment Type,{calc_input.equipment_type.value},
+Material,{calc_input.material.value},
+Environment,{calc_input.environment.value},
+Initial Thickness,{calc_input.initial_thickness},mm
+Current Thickness,{calc_input.current_thickness},mm
+Service Time,{calc_input.service_years},years
+Minimum Thickness,{calc_input.min_thickness},mm
+Corrosion Rate,{calc_result.corrosion_rate:.3f},mm/year
+Thickness Loss,{calc_result.thickness_loss:.2f},mm
 Remaining Life,{remaining_life if remaining_life is not None else 'N/A'},years
 """
                     st.download_button(
                         "📊 Download CSV",
                         csv_data,
-                        file_name=f"corrosion_data_{equipment_id or 'equipment'}.csv",
+                        file_name=f"corrosion_data_{calc_input.equipment_id or 'equipment'}.csv",
                         mime="text/csv"
                     )
     
-    else:
-        # Welcome message when no calculations performed
-        if not (initial_thickness and current_thickness and service_years):
-            st.markdown("""
-            This tool helps you calculate corrosion rates and predict remaining equipment life based on thickness measurements.
-            
-            **🎯 What you get:**
-            - **Corrosion Rate**: mm/year based on your measurements
-            - **Remaining Life**: Years until minimum thickness
-            - **API 571 Validation**: Cross-check against industry standards
-            - **Recommendations**: Actionable guidance for your equipment
-            
-            **📋 To get started:**
-            1. Enter your **thickness measurements** (initial, current, service time)
-            2. Optionally specify **equipment details** for better validation
-            3. Set **minimum required thickness** for safety assessment
-            4. Review **results and recommendations**
-            5. **Export** your analysis report
-            
-            **📏 Units**: All calculations use metric units (mm, years)
-            
-            **Try it now** - enter your thickness measurements above!
-            """)
+    except ValidationError as e:
+        # Handle Pydantic validation errors
+        st.error("❌ **Input Validation Error**")
+        for error in e.errors():
+            field = error['loc'][0] if error['loc'] else 'unknown'
+            message = error['msg']
+            st.error(f"**{field.replace('_', ' ').title()}**: {message}")
+    
+    # Welcome message when no calculations performed
+    if not (initial_thickness and current_thickness and service_years):
+        st.markdown("""
+        This tool helps you calculate corrosion rates and predict remaining equipment life based on thickness measurements.
+        
+        **🎯 What you get:**
+        - **Corrosion Rate**: mm/year based on your measurements
+        - **Remaining Life**: Years until minimum thickness
+        - **API 571 Validation**: Cross-check against industry standards
+        - **Recommendations**: Actionable guidance for your equipment
+        
+        **📋 To get started:**
+        1. Enter your **thickness measurements** (initial, current, service time)
+        2. Optionally specify **equipment details** for better validation
+        3. Set **minimum required thickness** for safety assessment
+        4. Review **results and recommendations**
+        5. **Export** your analysis report
+        
+        **📏 Units**: All calculations use metric units (mm, years)
+        
+        **Try it now** - enter your thickness measurements above!
+        """)
 
-# Hybrid chatbot page
+# Hybrid chatbot page with Pydantic validation
 def chatbot_page():
-    """Updated chatbot page with hybrid LLM and follow-up questions"""
-    st.title("🛡️ MCI AI-Assitance")
+    """Updated chatbot page with hybrid LLM and follow-up questions with Pydantic validation"""
+    st.title("🛡️ MCI AI-Assistance")
     st.markdown("**MCI Engineering Consultant**")
     
-    # Initialize session state for chatbot
+    # Initialize session state for chatbot with validation
     if "chat_messages" not in st.session_state:
         st.session_state.chat_messages = []
+    
+    # Validate existing messages
+    validated_messages = []
+    for msg in st.session_state.chat_messages:
+        try:
+            if isinstance(msg, dict):
+                validated_msg = ChatMessage(**msg)
+            else:
+                validated_msg = msg
+            validated_messages.append(validated_msg)
+        except ValidationError:
+            # Skip invalid messages
+            continue
+    st.session_state.chat_messages = validated_messages
     
     # Initialize cache
     cache = SimpleCache()
@@ -1476,20 +1686,25 @@ def chatbot_page():
                 if st.session_state.get("processing_example") == example:
                     continue
                     
-                # Add user message only once
-                st.session_state.chat_messages.append({"role": "user", "content": example})
-                
-                # Check cache first
-                cached_response = cache.get(example)
-                if cached_response:
-                    response = cached_response + "\n\n*[Cached response]*"
-                    st.session_state.chat_messages.append({"role": "assistant", "content": response})
-                else:
-                    # Set flag for streaming response and mark as processing
-                    st.session_state.pending_example = example
-                    st.session_state.processing_example = example
-                
-                st.rerun()
+                # Add user message only once with validation
+                try:
+                    user_msg = ChatMessage(role="user", content=example)
+                    st.session_state.chat_messages.append(user_msg)
+                    
+                    # Check cache first
+                    cached_response = cache.get(example)
+                    if cached_response:
+                        response = cached_response + "\n\n*[Cached response]*"
+                        assistant_msg = ChatMessage(role="assistant", content=response)
+                        st.session_state.chat_messages.append(assistant_msg)
+                    else:
+                        # Set flag for streaming response and mark as processing
+                        st.session_state.pending_example = example
+                        st.session_state.processing_example = example
+                    
+                    st.rerun()
+                except ValidationError as e:
+                    st.error(f"Message validation error: {e}")
         
         # Show cache stats if available
         if st.session_state.get("chat_cache"):
@@ -1498,14 +1713,14 @@ def chatbot_page():
     
     # Display chat history with follow-up questions
     for i, message in enumerate(st.session_state.chat_messages):
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        with st.chat_message(message.role):
+            st.markdown(message.content)
         
         # Add follow-up questions after each assistant response
-        if message["role"] == "assistant" and i > 0:
+        if message.role == "assistant" and i > 0:
             # Get the user query that prompted this response
-            user_query = st.session_state.chat_messages[i-1]["content"] if i > 0 else ""
-            assistant_response = message["content"]
+            user_query = st.session_state.chat_messages[i-1].content if i > 0 else ""
+            assistant_response = message.content
             
             # Generate follow-up questions
             try:
@@ -1525,10 +1740,14 @@ def chatbot_page():
                                 help=question,
                                 use_container_width=True
                             ):
-                                st.session_state.chat_messages.append({"role": "user", "content": question})
-                                st.rerun()
+                                try:
+                                    new_msg = ChatMessage(role="user", content=question)
+                                    st.session_state.chat_messages.append(new_msg)
+                                    st.rerun()
+                                except ValidationError as e:
+                                    st.error(f"Message validation error: {e}")
             except Exception as e:
-                st.write(f"Debug: Error generating follow-ups: {e}")
+                pass  # Silently continue if follow-up generation fails
     
     # Handle pending example streaming
     if st.session_state.get("pending_example"):
@@ -1549,10 +1768,15 @@ def chatbot_page():
                 
                 message_placeholder.markdown(full_response)
                 
-                # Cache and store the response
+                # Cache and store the response with validation
                 clean_response = full_response.replace("\n\n*📡 Enhanced with web search*", "")
                 cache.set(example, clean_response)
-                st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
+                
+                try:
+                    assistant_msg = ChatMessage(role="assistant", content=full_response)
+                    st.session_state.chat_messages.append(assistant_msg)
+                except ValidationError as e:
+                    st.error(f"Response validation error: {e}")
                 
                 # Generate and show follow-up questions immediately after streaming
                 try:
@@ -1570,15 +1794,23 @@ def chatbot_page():
                                     help=question,
                                     use_container_width=True
                                 ):
-                                    st.session_state.chat_messages.append({"role": "user", "content": question})
-                                    st.rerun()
+                                    try:
+                                        new_msg = ChatMessage(role="user", content=question)
+                                        st.session_state.chat_messages.append(new_msg)
+                                        st.rerun()
+                                    except ValidationError as e:
+                                        st.error(f"Message validation error: {e}")
                 except Exception as e:
                     pass  # Silently continue if follow-up generation fails
                 
             except Exception as e:
                 error_msg = f"❌ Error generating response: {str(e)}"
                 message_placeholder.markdown(error_msg)
-                st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
+                try:
+                    error_message = ChatMessage(role="assistant", content=error_msg)
+                    st.session_state.chat_messages.append(error_message)
+                except ValidationError:
+                    pass
             
             finally:
                 # Clear processing flag
@@ -1587,12 +1819,12 @@ def chatbot_page():
     
     # Check if we need to auto-respond to a follow-up question
     if (len(st.session_state.chat_messages) > 0 and 
-        st.session_state.chat_messages[-1]["role"] == "user" and
+        st.session_state.chat_messages[-1].role == "user" and
         not st.session_state.get("processing_prompt") and
         not st.session_state.get("pending_example")):
         
         # This means a follow-up question was just added, auto-generate response
-        latest_prompt = st.session_state.chat_messages[-1]["content"]
+        latest_prompt = st.session_state.chat_messages[-1].content
         
         # Check cache first
         cached_response = cache.get(latest_prompt)
@@ -1617,12 +1849,20 @@ def chatbot_page():
                                     help=question,
                                     use_container_width=True
                                 ):
-                                    st.session_state.chat_messages.append({"role": "user", "content": question})
-                                    st.rerun()
+                                    try:
+                                        new_msg = ChatMessage(role="user", content=question)
+                                        st.session_state.chat_messages.append(new_msg)
+                                        st.rerun()
+                                    except ValidationError as e:
+                                        st.error(f"Message validation error: {e}")
                 except Exception as e:
                     pass
                     
-            st.session_state.chat_messages.append({"role": "assistant", "content": response})
+            try:
+                assistant_msg = ChatMessage(role="assistant", content=response)
+                st.session_state.chat_messages.append(assistant_msg)
+            except ValidationError as e:
+                st.error(f"Response validation error: {e}")
         else:
             # Generate streaming response automatically
             with st.chat_message("assistant"):
@@ -1636,10 +1876,15 @@ def chatbot_page():
                     
                     message_placeholder.markdown(full_response)
                     
-                    # Cache and store the response
+                    # Cache and store the response with validation
                     clean_response = full_response.replace("\n\n*📡 Enhanced with web search*", "")
                     cache.set(latest_prompt, clean_response)
-                    st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
+                    
+                    try:
+                        assistant_msg = ChatMessage(role="assistant", content=full_response)
+                        st.session_state.chat_messages.append(assistant_msg)
+                    except ValidationError as e:
+                        st.error(f"Response validation error: {e}")
                     
                     # Generate and show follow-up questions immediately after streaming
                     try:
@@ -1657,24 +1902,37 @@ def chatbot_page():
                                         help=question,
                                         use_container_width=True
                                     ):
-                                        st.session_state.chat_messages.append({"role": "user", "content": question})
-                                        st.rerun()
+                                        try:
+                                            new_msg = ChatMessage(role="user", content=question)
+                                            st.session_state.chat_messages.append(new_msg)
+                                            st.rerun()
+                                        except ValidationError as e:
+                                            st.error(f"Message validation error: {e}")
                     except Exception as e:
                         pass
                     
                 except Exception as e:
                     error_msg = f"❌ Error generating response: {str(e)}"
                     message_placeholder.markdown(error_msg)
-                    st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
+                    try:
+                        error_message = ChatMessage(role="assistant", content=error_msg)
+                        st.session_state.chat_messages.append(error_message)
+                    except ValidationError:
+                        pass
 
-    # Chat input with hybrid streaming
+    # Chat input with hybrid streaming and validation
     if prompt := st.chat_input("Ask about materials, corrosion, integrity, or engineering..."):
         # Check if we're already processing this prompt
         if st.session_state.get("processing_prompt") == prompt:
             return
             
-        # Add user message to chat history
-        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        # Add user message to chat history with validation
+        try:
+            user_msg = ChatMessage(role="user", content=prompt)
+            st.session_state.chat_messages.append(user_msg)
+        except ValidationError as e:
+            st.error(f"Input validation error: {e}")
+            return
         
         # Display user message
         with st.chat_message("user"):
@@ -1703,12 +1961,20 @@ def chatbot_page():
                                     help=question,
                                     use_container_width=True
                                 ):
-                                    st.session_state.chat_messages.append({"role": "user", "content": question})
-                                    st.rerun()
+                                    try:
+                                        new_msg = ChatMessage(role="user", content=question)
+                                        st.session_state.chat_messages.append(new_msg)
+                                        st.rerun()
+                                    except ValidationError as e:
+                                        st.error(f"Message validation error: {e}")
                 except Exception as e:
                     pass  # Silently continue if follow-up generation fails
                     
-            st.session_state.chat_messages.append({"role": "assistant", "content": response})
+            try:
+                assistant_msg = ChatMessage(role="assistant", content=response)
+                st.session_state.chat_messages.append(assistant_msg)
+            except ValidationError as e:
+                st.error(f"Response validation error: {e}")
         else:
             # Mark as processing
             st.session_state.processing_prompt = prompt
@@ -1725,10 +1991,15 @@ def chatbot_page():
                     
                     message_placeholder.markdown(full_response)
                     
-                    # Cache and store the response
+                    # Cache and store the response with validation
                     clean_response = full_response.replace("\n\n*📡 Enhanced with web search*", "")
                     cache.set(prompt, clean_response)
-                    st.session_state.chat_messages.append({"role": "assistant", "content": full_response})
+                    
+                    try:
+                        assistant_msg = ChatMessage(role="assistant", content=full_response)
+                        st.session_state.chat_messages.append(assistant_msg)
+                    except ValidationError as e:
+                        st.error(f"Response validation error: {e}")
                     
                     # Generate and show follow-up questions immediately after streaming
                     try:
@@ -1746,15 +2017,23 @@ def chatbot_page():
                                         help=question,
                                         use_container_width=True
                                     ):
-                                        st.session_state.chat_messages.append({"role": "user", "content": question})
-                                        st.rerun()
+                                        try:
+                                            new_msg = ChatMessage(role="user", content=question)
+                                            st.session_state.chat_messages.append(new_msg)
+                                            st.rerun()
+                                        except ValidationError as e:
+                                            st.error(f"Message validation error: {e}")
                     except Exception as e:
                         pass  # Silently continue if follow-up generation fails
                     
                 except Exception as e:
                     error_msg = f"❌ Error generating response: {str(e)}"
                     message_placeholder.markdown(error_msg)
-                    st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
+                    try:
+                        error_message = ChatMessage(role="assistant", content=error_msg)
+                        st.session_state.chat_messages.append(error_message)
+                    except ValidationError:
+                        pass
                 
                 finally:
                     # Clear processing flag
@@ -1779,9 +2058,9 @@ def chatbot_page():
         **Try asking:** *"What are the key factors in material selection for offshore platforms?"*
         """)
 
-# Analysis page with hybrid LLM
+# Analysis page with hybrid LLM and Pydantic validation
 def analysis_page():
-    """Structured analysis page implementation with hybrid streaming"""
+    """Structured analysis page implementation with hybrid streaming and Pydantic validation"""
     st.title("🔬 SmartMCI Analysis")
     st.markdown("**Structured Analysis with Equipment Parameters**")
     
@@ -1816,7 +2095,7 @@ def analysis_page():
         
         st.markdown("---")
         
-        # Input form on main page
+        # Input form on main page with Pydantic validation
         st.markdown("## 📋 Equipment Parameters")
         st.markdown("Configure your equipment details for comprehensive MCI analysis")
         
@@ -1827,26 +2106,26 @@ def analysis_page():
             with col1:
                 equipment_type = st.selectbox(
                     "Equipment Type:", 
-                    ["Not Specified"] + EQUIPMENT_TYPES,
+                    EQUIPMENT_TYPES,
                     help="Select equipment for specific guidance"
                 )
                 
                 material = st.selectbox(
                     "Material:", 
-                    ["Not Specified"] + MATERIALS,
+                    MATERIALS,
                     help="Select material for specific recommendations"
                 )
             
             with col2:
                 environment = st.selectbox(
                     "Service Environment:", 
-                    ["Not Specified"] + ENVIRONMENTS,
+                    ENVIRONMENTS,
                     help="Select environment for specific analysis"
                 )
                 
                 damage_mechanism = st.selectbox(
                     "Damage Type:", 
-                    ["Not Specified"] + DAMAGE_MECHANISMS,
+                    DAMAGE_MECHANISMS,
                     help="Select damage type for specific information"
                 )
         
@@ -1874,101 +2153,109 @@ def analysis_page():
                     help="Operating pressure in bar"
                 )
         
-        # Analysis Configuration Section
-        with st.expander("🔍 **Analysis Configuration**", expanded=True):
-            analysis_focus = st.selectbox(
-                "Focus Area:",
-                [
-                    "Comprehensive Analysis",
-                    "Damage Mechanisms Only",
-                    "Mitigation Strategies Only", 
-                    "Operating Limits Only"
-                ],
-                help="Choose the scope of your analysis"
+        # Validate equipment context
+        try:
+            equipment_context = EquipmentContext(
+                equipment_type=EquipmentType(equipment_type),
+                material=Material(material),
+                environment=Environment(environment),
+                damage_mechanism=DamageMechanism(damage_mechanism),
+                temperature=temperature,
+                pressure=pressure
             )
             
-            # Show current parameter summary
-            st.markdown("### 📊 **Parameter Summary**")
-            
-            # Create summary of selected parameters
-            selected_params = []
-            if equipment_type != "Not Specified":
-                selected_params.append(f"**Equipment:** {equipment_type}")
-            if material != "Not Specified":
-                selected_params.append(f"**Material:** {material}")
-            if environment != "Not Specified":
-                selected_params.append(f"**Environment:** {environment}")
-            if damage_mechanism != "Not Specified":
-                selected_params.append(f"**Damage Type:** {damage_mechanism}")
-            if temperature is not None:
-                selected_params.append(f"**Temperature:** {temperature}°C")
-            if pressure is not None:
-                selected_params.append(f"**Pressure:** {pressure} bar")
-            
-            if selected_params:
-                for param in selected_params:
-                    st.markdown(f"- {param}")
-            else:
-                st.info("💡 Select parameters above to see summary")
-        
-        # Action Buttons
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 1])
-        
-        with col1:
-            if st.button("🔍 **Run Analysis**", type="primary", use_container_width=True):
-                # Create equipment context
-                equipment_context = {
-                    'equipment_type': equipment_type,
-                    'material': material,
-                    'environment': environment,
-                    'damage_mechanism': damage_mechanism,
-                    'temperature': f"{temperature}°C" if temperature is not None else "Not Specified",
-                    'pressure': f"{pressure} bar" if pressure is not None else "Not Specified"
-                }
+            # Analysis Configuration Section
+            with st.expander("🔍 **Analysis Configuration**", expanded=True):
+                analysis_focus = st.selectbox(
+                    "Focus Area:",
+                    [
+                        "Comprehensive Analysis",
+                        "Damage Mechanisms Only",
+                        "Mitigation Strategies Only", 
+                        "Operating Limits Only"
+                    ],
+                    help="Choose the scope of your analysis"
+                )
                 
-                # Create analysis query based on context
-                context_parts = []
-                if damage_mechanism != "Not Specified":
-                    context_parts.append(damage_mechanism)
-                if equipment_type != "Not Specified":
-                    context_parts.append(f"in {equipment_type}")
-                if material != "Not Specified":
-                    context_parts.append(f"({material})")
-                if environment != "Not Specified":
-                    context_parts.append(f"for {environment}")
+                # Show current parameter summary
+                st.markdown("### 📊 **Parameter Summary**")
                 
-                if context_parts:
-                    query = f"{analysis_focus} for {' '.join(context_parts)}"
+                # Create summary of selected parameters
+                selected_params = []
+                if equipment_context.equipment_type != EquipmentType.NOT_SPECIFIED:
+                    selected_params.append(f"**Equipment:** {equipment_context.equipment_type.value}")
+                if equipment_context.material != Material.NOT_SPECIFIED:
+                    selected_params.append(f"**Material:** {equipment_context.material.value}")
+                if equipment_context.environment != Environment.NOT_SPECIFIED:
+                    selected_params.append(f"**Environment:** {equipment_context.environment.value}")
+                if equipment_context.damage_mechanism != DamageMechanism.NOT_SPECIFIED:
+                    selected_params.append(f"**Damage Type:** {equipment_context.damage_mechanism.value}")
+                if equipment_context.temperature is not None:
+                    selected_params.append(f"**Temperature:** {equipment_context.temperature}°C")
+                if equipment_context.pressure is not None:
+                    selected_params.append(f"**Pressure:** {equipment_context.pressure} bar")
+                
+                if selected_params:
+                    for param in selected_params:
+                        st.markdown(f"- {param}")
                 else:
-                    query = f"{analysis_focus} - general MCI engineering guidance"
-                
-                # Store in session state for streaming processing
-                st.session_state.analysis_query = query
-                st.session_state.analysis_context = equipment_context
-                st.session_state.stream_analysis = True
-                st.rerun()
+                    st.info("💡 Select parameters above to see summary")
+            
+            # Action Buttons
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 1])
+            
+            with col1:
+                if st.button("🔍 **Run Analysis**", type="primary", use_container_width=True):
+                    # Create analysis query based on context
+                    context_parts = []
+                    if equipment_context.damage_mechanism != DamageMechanism.NOT_SPECIFIED:
+                        context_parts.append(equipment_context.damage_mechanism.value)
+                    if equipment_context.equipment_type != EquipmentType.NOT_SPECIFIED:
+                        context_parts.append(f"in {equipment_context.equipment_type.value}")
+                    if equipment_context.material != Material.NOT_SPECIFIED:
+                        context_parts.append(f"({equipment_context.material.value})")
+                    if equipment_context.environment != Environment.NOT_SPECIFIED:
+                        context_parts.append(f"for {equipment_context.environment.value}")
+                    
+                    if context_parts:
+                        query = f"{analysis_focus} for {' '.join(context_parts)}"
+                    else:
+                        query = f"{analysis_focus} - general MCI engineering guidance"
+                    
+                    # Store in session state for streaming processing
+                    st.session_state.analysis_query = query
+                    st.session_state.analysis_context = equipment_context
+                    st.session_state.stream_analysis = True
+                    st.rerun()
+            
+            with col2:
+                # Example configurations
+                if st.button("📋 **Load Example**", use_container_width=True):
+                    st.info("💡 **Example Configuration Loaded**\n\nTry: Carbon Steel pressure vessel in marine environment with pitting corrosion")
+            
+            with col3:
+                # Help
+                if st.button("❓ **Help**", use_container_width=True):
+                    st.info("""
+                    **🔧 How to use:**
+                    1. Select equipment parameters above
+                    2. Choose analysis focus
+                    3. Click 'Run Analysis'
+                    4. Review comprehensive results
+                    
+                    **💡 Tips:**
+                    - More parameters = more specific analysis
+                    - All parameters are optional
+                    - Results include API references
+                    """)
         
-        with col2:
-            # Example configurations
-            if st.button("📝 **Load Example**", use_container_width=True):
-                st.info("💡 **Example Configuration Loaded**\n\nTry: Carbon Steel pressure vessel in marine environment with pitting corrosion")
-        
-        with col3:
-            # Help
-            if st.button("❓ **Help**", use_container_width=True):
-                st.info("""
-                **🔧 How to use:**
-                1. Select equipment parameters above
-                2. Choose analysis focus
-                3. Click 'Run Analysis'
-                4. Review comprehensive results
-                
-                **💡 Tips:**
-                - More parameters = more specific analysis
-                - All parameters are optional
-                - Results include API references
-                """)
+        except ValidationError as e:
+            st.error("❌ **Parameter Validation Error**")
+            for error in e.errors():
+                field = error['loc'][0] if error['loc'] else 'unknown'
+                message = error['msg']
+                st.error(f"**{field.replace('_', ' ').title()}**: {message}")
     
     else:
         # Results view with sidebar controls
@@ -1984,7 +2271,7 @@ def analysis_page():
                 st.rerun()
             
             if st.button("📄 Export Report", use_container_width=True):
-                context = st.session_state.get("analysis_context", {})
+                context = st.session_state.get("analysis_context")
                 timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
                 
                 report = f"""MCI Engineering Analysis Report
@@ -1992,9 +2279,15 @@ Generated: {timestamp}
 
 EQUIPMENT PARAMETERS:
 """
-                for key, value in context.items():
-                    if value != "Not Specified":
-                        report += f"- {key.replace('_', ' ').title()}: {value}\n"
+                if context:
+                    try:
+                        validated_context = EquipmentContext(**context.dict() if hasattr(context, 'dict') else context)
+                        for field_name, field_value in validated_context:
+                            if field_value is not None and str(field_value) != "Not Specified":
+                                display_name = field_name.replace('_', ' ').title()
+                                report += f"- {display_name}: {field_value}\n"
+                    except (ValidationError, AttributeError):
+                        report += "- Context validation error\n"
                 
                 report += f"\nANALYSIS RESULTS:\n{'-' * 50}\n"
                 report += st.session_state.analysis_result
@@ -2011,13 +2304,18 @@ EQUIPMENT PARAMETERS:
             
             # Show analysis context
             st.markdown("### 📋 Analysis Context")
-            context = st.session_state.get("analysis_context", {})
+            context = st.session_state.get("analysis_context")
             context_items = []
             
-            for key, value in context.items():
-                if value != "Not Specified":
-                    display_key = key.replace('_', ' ').title()
-                    context_items.append(f"**{display_key}:** {value}")
+            if context:
+                try:
+                    validated_context = EquipmentContext(**context.dict() if hasattr(context, 'dict') else context)
+                    for field_name, field_value in validated_context:
+                        if field_value is not None and str(field_value) != "Not Specified":
+                            display_name = field_name.replace('_', ' ').title()
+                            context_items.append(f"**{display_name}:** {field_value}")
+                except (ValidationError, AttributeError):
+                    context_items.append("*Context validation error*")
             
             if context_items:
                 for item in context_items:
@@ -2037,10 +2335,21 @@ EQUIPMENT PARAMETERS:
     # Process streaming analysis if requested
     if st.session_state.get("stream_analysis", False):
         query = st.session_state.get("analysis_query", "")
-        context = st.session_state.get("analysis_context", {})
+        context = st.session_state.get("analysis_context")
+        
+        # Validate context
+        try:
+            if context:
+                validated_context = EquipmentContext(**context.dict() if hasattr(context, 'dict') else context)
+            else:
+                validated_context = None
+        except ValidationError:
+            validated_context = None
+            st.warning("⚠️ Context validation failed, proceeding with general analysis")
         
         # Check cache
-        cached_response = cache.get(query, context)
+        context_dict = validated_context.dict() if validated_context else {}
+        cached_response = cache.get(query, context_dict)
         
         if cached_response:
             st.session_state.analysis_result = cached_response + "\n\n*[Cached response]*"
@@ -2050,23 +2359,23 @@ EQUIPMENT PARAMETERS:
             message_placeholder = st.empty()
             full_response = ""
             
-            for chunk in generate_response_stream_hybrid(query, vectorstores, equipment_context=context):
+            for chunk in generate_response_stream_hybrid(query, vectorstores, equipment_context=validated_context):
                 full_response += chunk
                 message_placeholder.markdown(full_response + "▌")
             
             message_placeholder.markdown(full_response)
             
             # Cache and store the response
-            cache.set(query, full_response, context)
+            cache.set(query, full_response, context_dict)
             st.session_state.analysis_result = full_response
         
         # Clear the stream flag
         st.session_state.stream_analysis = False
         st.rerun()
 
-# Main application function
+# Main application function with Pydantic validation
 def main():
-    """Main application with hybrid LLM"""
+    """Main application with hybrid LLM and Pydantic validation"""
     
     # Initialize session state for page selection
     if "current_page" not in st.session_state:
@@ -2107,6 +2416,19 @@ def main():
     
     st.sidebar.markdown("---")
     
+    # Show Pydantic validation status
+    st.sidebar.markdown("### 🔧 System Status")
+    try:
+        # Test API configuration validation
+        api_config = APIConfig(
+            groq_api_key=os.environ.get("GROQ_API_KEY", "test"),
+            pinecone_api_key=os.environ.get("PINECONE_API_KEY", "test"),
+            tavily_api_key=os.environ.get("TAVILY_API_KEY", "test")
+        )
+        st.sidebar.success("✅ Pydantic Validation Active")
+    except ValidationError:
+        st.sidebar.warning("⚠️ Some API keys missing")
+    
     # Route to appropriate page
     if st.session_state.current_page == "ChatBot":
         chatbot_page()
@@ -2117,7 +2439,7 @@ def main():
     
     # Common footer
     st.markdown("---")
-    st.caption("⚠️ **Engineering verification required** | Based on API 571/970/584 standards")
+    st.caption("⚠️ **Engineering verification required** | Based on API 571/970/584 standards | 🔧 **Pydantic validation enabled**")
 
 if __name__ == "__main__":
     main()
