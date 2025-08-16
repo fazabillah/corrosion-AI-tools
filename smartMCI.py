@@ -377,7 +377,7 @@ def analyze_query_complexity(query: str, equipment_context: Optional[EquipmentCo
     
     # 3. EQUIPMENT CONTEXT ANALYSIS
     if equipment_context:
-        specified_params = sum(1 for field_name, field_value in equipment_context:
+        specified_params = sum(1 for field_name, field_value in equipment_context.__dict__.items()
                              if field_value is not None and str(field_value) != "Not Specified")
         if specified_params >= 4:  # Many parameters specified = complex analysis
             complexity_score += 3
@@ -1253,7 +1253,7 @@ def generate_response_stream_hybrid(query: str, vectorstores: dict, chat_history
         # Prepare prompt
         if equipment_context:
             context_parts = []
-            for field_name, field_value in equipment_context:
+            for field_name, field_value in equipment_context.__dict__.items():
                 if field_value is not None and str(field_value) != "Not Specified":
                     display_name = field_name.replace('_', ' ').title()
                     context_parts.append(f"{display_name}: {field_value}")
@@ -2282,7 +2282,7 @@ EQUIPMENT PARAMETERS:
                 if context:
                     try:
                         validated_context = EquipmentContext(**context.dict() if hasattr(context, 'dict') else context)
-                        for field_name, field_value in validated_context:
+                        for field_name, field_value in validated_context.__dict__.items():
                             if field_value is not None and str(field_value) != "Not Specified":
                                 display_name = field_name.replace('_', ' ').title()
                                 report += f"- {display_name}: {field_value}\n"
@@ -2310,7 +2310,7 @@ EQUIPMENT PARAMETERS:
             if context:
                 try:
                     validated_context = EquipmentContext(**context.dict() if hasattr(context, 'dict') else context)
-                    for field_name, field_value in validated_context:
+                    for field_name, field_value in validated_context.__dict__.items():
                         if field_value is not None and str(field_value) != "Not Specified":
                             display_name = field_name.replace('_', ' ').title()
                             context_items.append(f"**{display_name}:** {field_value}")
